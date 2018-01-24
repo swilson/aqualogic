@@ -7,4 +7,4 @@ Warning: work-in-progress
 
 Warning: python noob
 
-This project is not affiliated or endorsed by Hayward Industries Inc. in any way. 
+This project is not affiliated with or endorsed by Hayward Industries Inc. in any way. 
