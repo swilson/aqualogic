@@ -2,6 +2,9 @@ from threading import Thread
 from enum import Enum, unique
 import re
 import binascii
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 @unique
 class Leds(Enum):
@@ -45,10 +48,13 @@ class AquaLogic(object):
 
     def __init__(self, stream):
         self._stream = stream
-        self._is_celsius = True
+        self._is_metric = False
         self._air_temp = None
         self._pool_temp = None
-        self._chlorinator = None
+        self._spa_temp = None
+        self._pool_chlorinator = None
+        self._spa_chlorinator = None
+        self._salt_level = None
         self._leds = 0
 
     def data_reader(self):
@@ -99,7 +105,7 @@ class AquaLogic(object):
                 calculated_crc += b
             
             if (frame_crc != calculated_crc):
-                print('Bad CRC')
+                logging.warning('Bad CRC')
                 continue
 
             frame_type = frame[0:2]
@@ -109,46 +115,76 @@ class AquaLogic(object):
                 # Keep alive
                 continue
             elif frame_type == self.FRAME_TYPE_KEY_EVENT:
-                print("Key: {}".format(binascii.hexlify(frame)))
+                _LOGGER.debug("Key: %s", binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
-                print("LEDs: {}".format(binascii.hexlify(frame)))
+                _LOGGER.debug("LEDs: %s", binascii.hexlify(frame))
                 self._leds = int.from_bytes(frame[0:4], byteorder='little')
                 for led in Leds:
                     if led.value & self._leds != 0:
-                        print(led)
+                        _LOGGER.debug(led)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
-                print("Display Update: {}".format(parts))
+                _LOGGER.debug('Display update: %s', parts)
 
                 try: 
                     if parts[0] == 'Pool' and parts[1] == 'Temp':
                         # Pool Temp <temp>°[C|F]
                         self._pool_temp = int(parts[2][:-2])
+                    elif parts[0] == 'Spa' and parts[1] == 'Temp':
+                        # Spa Temp <temp>°[C|F]
+                        self._spa_temp = int(parts[2][:-2])
                     elif parts[0] == 'Air' and parts[1] == 'Temp':
                         # Air Temp <temp>°[C|F]
                         self._air_temp = int(parts[2][:-2])
                     elif parts[0] == 'Pool' and parts[1] == 'Chlorinator':
                         # Pool Chlorinator <value>%
-                        self._chlorinator = int(parts[2][:-1])
+                        self._pool_chlorinator = int(parts[2][:-1])
+                    elif parts[0] == 'Spa' and parts[1] == 'Chlorinator':
+                        # Spa Chlorinator <value>%
+                        self._spa_chlorinator = int(parts[2][:-1])
+                    elif parts[0] == 'Salt' and parts[1] == 'Level':
+                        # Salt Level <value> [g/L|PPM|
+                        self._salt_level = float(parts[2])
+                        self._is_metric = parts[3] == 'g/L'
                 except ValueError:
                     pass
 
     @property
     def air_temp(self):
+        """Returns the current air temperature, or None if unknown."""
         return self._air_temp
 
     @property
     def pool_temp(self):
+        """Returns the current pool temperature, or None if unknown."""
         return self._pool_temp
     
     @property
-    def chlorinator(self):
-        return self._chlorinator
+    def spa_temp(self):
+        """Returns the current spa temperature, or None if unknown."""
+        return self._spa_temp
+
+    @property
+    def pool_chlorinator(self):
+        """Returns the current pool chlorinator level in %, or None if unknown."""
+        return self._pool_chlorinator
+
+    @property
+    def spa_chlorinator(self):
+        """Returns the current spa chlorinator level in %, or None if unknown."""
+        return self._spa_chlorinator
     
     @property
-    def is_celcius(self):
-        return self._is_celcius
+    def salt_level(self):
+        """Returns the current salt level, or None if unknown."""
+        return self._salt_level
+
+    @property
+    def is_metric(self):
+        """Returns True if the temperature and salt level values are in Metric."""
+        return self._is_metric
 
     def is_led_enabled(self, led):
+        """Returns True if the specified LED is enabled."""
         return (led.value & self._leds) != 0
 
