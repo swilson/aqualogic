@@ -1,6 +1,4 @@
-from threading import Thread
 from enum import Enum, unique
-import re
 import binascii
 import logging
 
@@ -34,6 +32,20 @@ class Leds(Enum):
     AUX_13 = 1 << 23
     AUX_14 = 1 << 24
     SUPER_CHLORINATE = 1 << 25
+
+@unique
+class Keys(Enum):
+    # Second word is the same on first down, 0000 every 100ms while holding
+    LIGHTS = 0x0001
+    AUX_1 = 0x0002
+    AUX_2 = 0x0004
+    RIGHT = 0x0100
+    MENU = 0x0200
+    LEFT = 0x0400
+    MINUS = 0x1000
+    PLUS = 0x2000
+    POOL_SPA = 0x4000
+    FILTER = 0x8000
 
 class AquaLogic(object):
     FRAME_DLE = 0x10
@@ -148,6 +160,8 @@ class AquaLogic(object):
                         self._is_metric = parts[3] == 'g/L'
                 except ValueError:
                     pass
+            else:
+                _LOGGER.debug("Unknown frame: %s", frame)
 
     @property
     def air_temp(self):
