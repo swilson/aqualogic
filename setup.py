@@ -20,7 +20,7 @@ AUTHOR = 'Sean Wilson'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    # 'requests', 'maya', 'records',
+    'zope.event'
 ]
 
 # The rest you shouldn't have to touch too much :)

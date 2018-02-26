@@ -1,11 +1,14 @@
-from enum import Enum, unique
+from enum import IntEnum, unique
 import binascii
 import logging
+import zope.event
+import time
+import queue
 
 _LOGGER = logging.getLogger(__name__)
 
 @unique
-class Leds(Enum):
+class Leds(IntEnum):
     HEATER_1 = 1 << 0
     VALVE_3 = 1 << 1
     CHECK_SYSTEM = 1 << 2
@@ -34,7 +37,7 @@ class Leds(Enum):
     SUPER_CHLORINATE = 1 << 25
 
 @unique
-class Keys(Enum):
+class Keys(IntEnum):
     # Second word is the same on first down, 0000 every 100ms while holding
     LIGHTS = 0x0001
     AUX_1 = 0x0002
@@ -58,8 +61,9 @@ class AquaLogic(object):
     FRAME_TYPE_LEDS = b'\x01\x02'
     FRAME_TYPE_DISPLAY_UPDATE = b'\x01\x03'
 
-    def __init__(self, stream):
-        self._stream = stream
+    def __init__(self, reader, writer):
+        self._reader = reader
+        self._writer = writer
         self._is_metric = False
         self._air_temp = None
         self._pool_temp = None
@@ -68,27 +72,28 @@ class AquaLogic(object):
         self._spa_chlorinator = None
         self._salt_level = None
         self._leds = 0
+        self._send_queue = queue.Queue()
 
     def data_reader(self):
         while True:
-            b = self._stream.read(1)
+            b = self._reader.read(1)
 
             while True:
                 # Search for FRAME_DLE + FRAME_STX
                 if not b:
                     return
                 if b[0] == self.FRAME_DLE:
-                    next_b = self._stream.read(1)
+                    next_b = self._reader.read(1)
                     if not next_b:
                         return
                     if next_b[0] == self.FRAME_STX:
                         break
                     else:
                         continue
-                b = self._stream.read(1)
+                b = self._reader.read(1)
 
             frame = bytearray()
-            b = self._stream.read(1)
+            b = self._reader.read(1)
 
             while True:
                 if not b:
@@ -96,7 +101,7 @@ class AquaLogic(object):
                 if b[0] == self.FRAME_DLE:
                     # Should be FRAME_ETX or 0 according to
                     # the AQ-CO-SERIAL manual
-                    next_b = self._stream.read(1)
+                    next_b = self._reader.read(1)
                     if not next_b:
                         return
                     if next_b[0] == self.FRAME_ETX:
@@ -106,7 +111,7 @@ class AquaLogic(object):
                         pass
 
                 frame.append(b[0])
-                b = self._stream.read(1)
+                b = self._reader.read(1)
             
             # Verify CRC
             frame_crc = int.from_bytes(frame[-2:], byteorder='big')
@@ -125,12 +130,21 @@ class AquaLogic(object):
 
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
+                try:
+                    send_frame = self._send_queue.get(block=False)
+                    self._writer.write(send_frame)
+                    self._writer.flush()
+                except queue.Empty:
+                    pass
                 continue
             elif frame_type == self.FRAME_TYPE_KEY_EVENT:
-                _LOGGER.debug("Key: %s", binascii.hexlify(frame))
+                _LOGGER.info("Key: %s", binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
                 _LOGGER.debug("LEDs: %s", binascii.hexlify(frame))
-                self._leds = int.from_bytes(frame[0:4], byteorder='little')
+                leds = int.from_bytes(frame[0:4], byteorder='little')
+                if leds != self._leds:
+                    self._leds = leds;
+                    zope.event.notify(self)
                 for led in Leds:
                     if led.value & self._leds != 0:
                         _LOGGER.debug(led)
@@ -141,28 +155,65 @@ class AquaLogic(object):
                 try: 
                     if parts[0] == 'Pool' and parts[1] == 'Temp':
                         # Pool Temp <temp>°[C|F]
-                        self._pool_temp = int(parts[2][:-2])
+                        value = int(parts[2][:-2])
+                        if self._pool_temp != value:
+                            self._pool_temp = value
+                            zope.event.notify(self)
                     elif parts[0] == 'Spa' and parts[1] == 'Temp':
                         # Spa Temp <temp>°[C|F]
-                        self._spa_temp = int(parts[2][:-2])
+                        value = int(parts[2][:-2])
+                        if self._spa_temp != value:
+                            self._spa_temp = value
+                            zope.event.notify(self)
                     elif parts[0] == 'Air' and parts[1] == 'Temp':
                         # Air Temp <temp>°[C|F]
-                        self._air_temp = int(parts[2][:-2])
+                        value = int(parts[2][:-2])
+                        if self._air_temp != value:
+                            self._air_temp = value
+                            zope.event.notify(self)
                     elif parts[0] == 'Pool' and parts[1] == 'Chlorinator':
                         # Pool Chlorinator <value>%
-                        self._pool_chlorinator = int(parts[2][:-1])
+                        value = int(parts[2][:-1])
+                        if self._pool_chlorinator != value:
+                            self._pool_chlorinator = value
+                            zope.event.notify(self)
                     elif parts[0] == 'Spa' and parts[1] == 'Chlorinator':
                         # Spa Chlorinator <value>%
-                        self._spa_chlorinator = int(parts[2][:-1])
+                        value = int(parts[2][:-1])
+                        if self._spa_chlorinator != value:
+                            self._spa_chlorinator = value
+                            zope.event.notify(self)
                     elif parts[0] == 'Salt' and parts[1] == 'Level':
                         # Salt Level <value> [g/L|PPM|
-                        self._salt_level = float(parts[2])
-                        self._is_metric = parts[3] == 'g/L'
+                        value = float(parts[2])
+                        if self._salt_level != value:
+                            self._salt_level = value
+                            self._is_metric = parts[3] == 'g/L'
+                            zope.event.notify(self)
                 except ValueError:
                     pass
             else:
                 _LOGGER.debug("Unknown frame: %s", frame)
 
+    def send_key(self, key):
+        frame = bytearray()
+        frame.append(self.FRAME_DLE)
+        frame.append(self.FRAME_STX)
+        frame.extend(self.FRAME_TYPE_KEY_EVENT)
+        frame.extend(key.value.to_bytes(2, byteorder='big'))
+        frame.extend(key.value.to_bytes(2, byteorder='big'))
+        crc = 0
+        for b in frame:
+            crc += b
+        frame.extend(crc.to_bytes(2, byteorder='big'))
+        frame.append(self.FRAME_DLE)
+        frame.append(self.FRAME_ETX)
+
+        # Queue it to send immediately following the reception
+        # of a keep-alive packet in an attempt to avoid bus collisions.
+        # TODO: check result and retry if a collision occurred
+        self._send_queue.put(frame)
+       
     @property
     def air_temp(self):
         """Returns the current air temperature, or None if unknown."""
@@ -197,6 +248,14 @@ class AquaLogic(object):
     def is_metric(self):
         """Returns True if the temperature and salt level values are in Metric."""
         return self._is_metric
+    
+    def leds(self):
+        list = []
+        """Returns a set containing the enabled LEDs."""
+        for e in Leds:
+            if e.value & self._leds != 0:
+                list.append(e)
+        return list
 
     def is_led_enabled(self, led):
         """Returns True if the specified LED is enabled."""
