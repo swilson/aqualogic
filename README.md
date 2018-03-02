@@ -1,7 +1,7 @@
 # aqualogic
-A python library to interface with a Hayward/Goldline AquaLogic pool controller. Based on Goldline prototol decoding work done by draythomp (http://www.desert-home.com/p/swimming-pool.html).
+A python library to interface with Hayward/Goldline AquaLogic/ProLogic pool controllers. Based on Goldline prototol decoding work done by draythomp (http://www.desert-home.com/p/swimming-pool.html).
 
-Requires an RS-485 interface; I'm using this one: http://www.usriot.com/products/rs485-to-ethernet-converter.html. Set the port to 19200-N-8-2.
+- [RS-485 Notes](https://github.com/swilson/aqualogic/wiki/RS%E2%80%90485-Notes)
 
 Warning: work-in-progress
 
