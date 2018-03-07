@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 setup(
   name = 'aqualogic',
   packages = ['aqualogic'], # this must be the same as the name above
@@ -27,4 +27,5 @@ setup(
       'Programming Language :: Python :: 3.3',
       'Programming Language :: Python :: 3.4',
   ],
+  install_requires=['zope.event>=4.3']
 )
