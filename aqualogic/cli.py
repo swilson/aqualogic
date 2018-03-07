@@ -1,8 +1,11 @@
-from aqualogic import AquaLogic, Keys
+"""aqualogic command line test app."""
+
+from core import AquaLogic, Keys
 import zope.event
 import socket
 import threading
 import logging
+import sys
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,7 +15,7 @@ def data_changed(aq):
     print(aq.leds())
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(('192.168.1.109', 23))
+s.connect((sys.argv[1], 23))
 reader = s.makefile(mode='rb')
 writer = s.makefile(mode='wb')
 

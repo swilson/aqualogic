@@ -1,3 +1,6 @@
+"""A library to interface with a Hayward/Goldline AquaLogic/ProLogic 
+pool controller."""
+
 from enum import IntEnum, unique
 import binascii
 import logging
@@ -193,9 +196,11 @@ class AquaLogic(object):
                 except ValueError:
                     pass
             else:
-                _LOGGER.debug("Unknown frame: %s", frame)
+                _LOGGER.info("Unknown frame: %s %s", 
+                    binascii.hexlify(frame_type), binascii.hexlify(frame))
 
     def send_key(self, key):
+        _LOGGER.info("Sending key %s", key)
         frame = bytearray()
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_STX)
@@ -211,7 +216,8 @@ class AquaLogic(object):
 
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
-        # TODO: check result and retry if a collision occurred
+        # TODO: check LCD output for result and retry if a collision 
+        # occurred
         self._send_queue.put(frame)
        
     @property
@@ -231,12 +237,14 @@ class AquaLogic(object):
 
     @property
     def pool_chlorinator(self):
-        """Returns the current pool chlorinator level in %, or None if unknown."""
+        """Returns the current pool chlorinator level in %, 
+        or None if unknown."""
         return self._pool_chlorinator
 
     @property
     def spa_chlorinator(self):
-        """Returns the current spa chlorinator level in %, or None if unknown."""
+        """Returns the current spa chlorinator level in %, 
+        or None if unknown."""
         return self._spa_chlorinator
     
     @property
@@ -246,7 +254,8 @@ class AquaLogic(object):
 
     @property
     def is_metric(self):
-        """Returns True if the temperature and salt level values are in Metric."""
+        """Returns True if the temperature and salt level values 
+        are in Metric."""
         return self._is_metric
     
     def leds(self):
