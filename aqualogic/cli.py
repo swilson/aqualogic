@@ -1,6 +1,6 @@
 """aqualogic command line test app."""
 
-from core import AquaLogic, Keys
+from core import AquaLogic, Keys, Leds
 import zope.event
 import socket
 import threading
@@ -12,7 +12,10 @@ logging.basicConfig(level=logging.INFO)
 def data_changed(aq):
     print('Pool Temp: {}'.format(aq.pool_temp))
     print('Air Temp: {}'.format(aq.air_temp))
-    print(aq.leds())
+    print('Pump Speed: {}'.format(aq.pump_speed))
+    print('Leds: {}'.format(aq.leds()))
+    if aq.is_led_enabled(Leds.CHECK_SYSTEM):
+        print('Check System: {}'.format(aq.check_system_msg))
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((sys.argv[1], 23))

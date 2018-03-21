@@ -63,6 +63,7 @@ class AquaLogic(object):
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
     FRAME_TYPE_LEDS = b'\x01\x02'
     FRAME_TYPE_DISPLAY_UPDATE = b'\x01\x03'
+    FRAME_TYPE_PUMP_SPEED = b'\x0c\x01'
 
     def __init__(self, reader, writer):
         self._reader = reader
@@ -74,6 +75,8 @@ class AquaLogic(object):
         self._pool_chlorinator = None
         self._spa_chlorinator = None
         self._salt_level = None
+        self._check_system_msg = None
+        self._pump_speed = None
         self._leds = 0
         self._send_queue = queue.Queue()
 
@@ -151,6 +154,11 @@ class AquaLogic(object):
                 for led in Leds:
                     if led.value & self._leds != 0:
                         _LOGGER.debug(led)
+            elif frame_type == self.FRAME_TYPE_PUMP_SPEED:
+                value = int.from_bytes(frame[0:2], byteorder='big')
+                if self._pump_speed != value:
+                    self._pump_speed = value
+                    zope.event.notify(self)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
                 _LOGGER.debug('Display update: %s', parts)
@@ -192,6 +200,12 @@ class AquaLogic(object):
                         if self._salt_level != value:
                             self._salt_level = value
                             self._is_metric = parts[3] == 'g/L'
+                            zope.event.notify(self)
+                    elif parts[0] == 'Check' and parts[1] == 'System':
+                        # Check System <msg>
+                        value = ' '.join(parts[2:])
+                        if self._check_system_msg != value:
+                            self._check_system_msg = value
                             zope.event.notify(self)
                 except ValueError:
                     pass
@@ -251,6 +265,17 @@ class AquaLogic(object):
     def salt_level(self):
         """Returns the current salt level, or None if unknown."""
         return self._salt_level
+    
+    @property
+    def check_system_msg(self):
+        """Returns the current 'Check System message, or None if unknown.
+        Only valid when Leds.CHECK_SYSTEM is on."""
+        return self._check_system_msg
+
+    @property
+    def pump_speed(self):
+        """Returns the current pump speed in percent, or None if unknown."""
+        return self._pump_speed
 
     @property
     def is_metric(self):
