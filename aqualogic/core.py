@@ -80,7 +80,8 @@ class AquaLogic(object):
         self._leds = 0
         self._send_queue = queue.Queue()
 
-    def data_reader(self):
+    def process(self):
+        """Process data; returns when the reader signals EOF."""
         while True:
             b = self._reader.read(1)
 
@@ -136,6 +137,7 @@ class AquaLogic(object):
 
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
+                # If a frame has been queued for transmit, send it.
                 try:
                     send_frame = self._send_queue.get(block=False)
                     self._writer.write(send_frame)
@@ -213,7 +215,8 @@ class AquaLogic(object):
                 _LOGGER.info("Unknown frame: %s %s", 
                     binascii.hexlify(frame_type), binascii.hexlify(frame))
 
-    def send_key(self, key):
+    def queue_key(self, key):
+        """Queues a key for sending."""
         _LOGGER.info("Sending key %s", key)
         frame = bytearray()
         frame.append(self.FRAME_DLE)

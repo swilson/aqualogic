@@ -2,12 +2,11 @@ from setuptools import setup
 setup(
   name = 'aqualogic',
   packages = ['aqualogic'], # this must be the same as the name above
-  version = '0.1',
+  version = '0.2',
   description = 'Library for interfacing with a Hayward/Goldline AquaLogic/ProLogic pool controller.',
   author = 'Sean Wilson',
   author_email = 'sean.wilson@live.ca',
   url = 'https://github.com/swilson/aqualogic',
-  download_url = 'https://github.com/swilson/aqualogic/archive/0.1.tar.gz',
   license='MIT',
   classifiers=[
       # How mature is this project? Common values are
