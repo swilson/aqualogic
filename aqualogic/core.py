@@ -171,18 +171,21 @@ class AquaLogic(object):
                         value = int(parts[2][:-2])
                         if self._pool_temp != value:
                             self._pool_temp = value
+                            self._is_metric = parts[2][-1:] == 'C'
                             zope.event.notify(self)
                     elif parts[0] == 'Spa' and parts[1] == 'Temp':
                         # Spa Temp <temp>°[C|F]
                         value = int(parts[2][:-2])
                         if self._spa_temp != value:
                             self._spa_temp = value
+                            self._is_metric = parts[2][-1:] == 'C'
                             zope.event.notify(self)
                     elif parts[0] == 'Air' and parts[1] == 'Temp':
                         # Air Temp <temp>°[C|F]
                         value = int(parts[2][:-2])
                         if self._air_temp != value:
                             self._air_temp = value
+                            self._is_metric = parts[2][-1:] == 'C'
                             zope.event.notify(self)
                     elif parts[0] == 'Pool' and parts[1] == 'Chlorinator':
                         # Pool Chlorinator <value>%
