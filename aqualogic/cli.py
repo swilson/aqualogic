@@ -33,5 +33,9 @@ reader_thread = threading.Thread(target=aq.process)
 reader_thread.start()
 
 while True:
-    key = Keys[input()]
-    aq.queue_key(key)
+    line = input()
+    try:
+        key = Keys[line]
+        aq.queue_key(key)
+    except KeyError:
+        print('Invalid key {}'.format(line))

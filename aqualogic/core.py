@@ -2,6 +2,7 @@
 pool controller."""
 
 from enum import IntEnum, unique
+from threading import Timer
 import binascii
 import logging
 import zope.event
@@ -45,9 +46,15 @@ class Keys(IntEnum):
     LIGHTS = 0x0001
     AUX_1 = 0x0002
     AUX_2 = 0x0004
+    AUX_3 = 0x0008
+    AUX_4 = 0x0010
+    AUX_5 = 0x0020
+    AUX_6 = 0x0040
+    AUX_7 = 0x0080
     RIGHT = 0x0100
     MENU = 0x0200
     LEFT = 0x0400
+    SYSTEM_OFF = 0x0800
     MINUS = 0x1000
     PLUS = 0x2000
     POOL_SPA = 0x4000
@@ -59,6 +66,7 @@ class AquaLogic(object):
     FRAME_ETX = 0x03
 
     FRAME_TYPE_KEY_EVENT = b'\x00\x03'
+    FRAME_TYPE_ON_OFF_EVENT = b'\x00\x05'   # only works for some keys
 
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
     FRAME_TYPE_LEDS = b'\x01\x02'
@@ -79,6 +87,13 @@ class AquaLogic(object):
         self._pump_speed = None
         self._leds = 0
         self._send_queue = queue.Queue()
+
+    def check_led_state(self, data):
+        if self.is_led_enabled(data['led']) == data['enabled']:
+            data['retries'] -= 1
+            if data['retries'] != 0:
+                # The LED state hasn't changed; re-queue the request
+                self._send_queue.put(data)
 
     def process(self):
         """Process data; returns when the reader signals EOF."""
@@ -138,17 +153,22 @@ class AquaLogic(object):
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
                 # If a frame has been queued for transmit, send it.
-                try:
-                    send_frame = self._send_queue.get(block=False)
-                    self._writer.write(send_frame)
+                if not self._send_queue.empty():
+                    data = self._send_queue.get(block=False)
+                    self._writer.write(data['frame'])
                     self._writer.flush()
-                except queue.Empty:
-                    pass
+                    _LOGGER.info('Sent: %s', binascii.hexlify(data['frame']))
+
+                    if data['led'] != None:
+                        # Set a timer to verify the LED state changes
+                        _LOGGER.debug('setting timer')
+                        Timer(1.0, self.check_led_state, [data]).start()
+
                 continue
             elif frame_type == self.FRAME_TYPE_KEY_EVENT:
-                _LOGGER.info("Key: %s", binascii.hexlify(frame))
+                _LOGGER.info('Key: %s', binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
-                _LOGGER.debug("LEDs: %s", binascii.hexlify(frame))
+                _LOGGER.debug('LEDs: %s', binascii.hexlify(frame))
                 leds = int.from_bytes(frame[0:4], byteorder='little')
                 if leds != self._leds:
                     self._leds = leds;
@@ -215,31 +235,48 @@ class AquaLogic(object):
                 except ValueError:
                     pass
             else:
-                _LOGGER.info("Unknown frame: %s %s", 
+                _LOGGER.info('Unknown frame: %s %s', 
                     binascii.hexlify(frame_type), binascii.hexlify(frame))
+
+    def append_data(self, frame, data):
+        for c in data:
+            frame.append(c)
+            if c == self.FRAME_DLE:
+                frame.append(0)
 
     def queue_key(self, key):
         """Queues a key for sending."""
-        _LOGGER.info("Sending key %s", key)
+        _LOGGER.info('Sending key %s', key)
         frame = bytearray()
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_STX)
-        frame.extend(self.FRAME_TYPE_KEY_EVENT)
-        frame.extend(key.value.to_bytes(2, byteorder='big'))
-        frame.extend(key.value.to_bytes(2, byteorder='big'))
+
+        self.append_data(frame, self.FRAME_TYPE_KEY_EVENT)
+        self.append_data(frame, key.value.to_bytes(2, byteorder='big'))
+        self.append_data(frame, key.value.to_bytes(2, byteorder='big'))
+    
         crc = 0
         for b in frame:
             crc += b
-        frame.extend(crc.to_bytes(2, byteorder='big'))
+        self.append_data(frame, crc.to_bytes(2, byteorder='big'))
+
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_ETX)
 
+        # See if this key has a corresponding LED.
+        led = None
+        enabled = False
+        try:
+            led = Leds[key.name]
+            enabled = self.is_led_enabled(led)
+        except KeyError:
+            pass
+
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
-        # TODO: check LCD output for result and retry if a collision 
-        # occurred
-        self._send_queue.put(frame)
-       
+        self._send_queue.put({'frame': frame, 'led': led, 
+            'enabled': enabled, 'retries': 5})
+
     @property
     def air_temp(self):
         """Returns the current air temperature, or None if unknown."""
