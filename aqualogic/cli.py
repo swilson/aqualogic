@@ -1,6 +1,6 @@
 """aqualogic command line test app."""
 
-from core import AquaLogic, Keys, Leds
+from core import AquaLogic, Keys, States
 import zope.event
 import socket
 import threading
@@ -14,8 +14,8 @@ def data_changed(aq):
     print('Pool Temp: {}'.format(aq.pool_temp))
     print('Air Temp: {}'.format(aq.air_temp))
     print('Pump Speed: {}'.format(aq.pump_speed))
-    print('Leds: {}'.format(aq.leds()))
-    if aq.is_led_enabled(Leds.CHECK_SYSTEM):
+    print('States: {}'.format(aq.states()))
+    if aq.get_state(States.CHECK_SYSTEM):
         print('Check System: {}'.format(aq.check_system_msg))
 
 print('Connecting to {}:{}...'.format(sys.argv[1], PORT))
@@ -36,6 +36,6 @@ while True:
     line = input()
     try:
         key = Keys[line]
-        aq.queue_key(key)
+        aq.send_key(key)
     except KeyError:
         print('Invalid key {}'.format(line))

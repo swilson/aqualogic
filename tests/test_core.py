@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from aqualogic.core import AquaLogic, Leds
+from aqualogic.core import AquaLogic, States
 from io import FileIO
 import pytest
 import logging
@@ -20,9 +20,9 @@ class TestAquaLogic(object):
         assert aq.pool_chlorinator == None
         assert aq.spa_chlorinator == 3
         assert aq.salt_level == 3.1
-        assert aq.is_led_enabled(Leds.POOL)
-        assert aq.is_led_enabled(Leds.FILTER)
-        assert not aq.is_led_enabled(Leds.SPA)
+        assert aq.get_state(States.POOL)
+        assert aq.get_state(States.FILTER)
+        assert not aq.get_state(States.SPA)
     
     def test_spa(self):
         reader = FileIO('tests/data/spa_on.bin')
@@ -35,6 +35,6 @@ class TestAquaLogic(object):
         assert aq.pool_chlorinator == None
         assert aq.spa_chlorinator == 3
         assert aq.salt_level == 3.1
-        assert not aq.is_led_enabled(Leds.POOL)
-        assert aq.is_led_enabled(Leds.FILTER)
-        assert aq.is_led_enabled(Leds.SPA)
+        assert not aq.get_state(States.POOL)
+        assert aq.get_state(States.FILTER)
+        assert aq.get_state(States.SPA)

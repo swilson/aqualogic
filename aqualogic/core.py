@@ -12,7 +12,9 @@ import queue
 _LOGGER = logging.getLogger(__name__)
 
 @unique
-class Leds(IntEnum):
+class States(IntEnum):
+    """States reported by the unit"""
+    # These correspond to the LEDs on the unit
     HEATER_1 = 1 << 0
     VALVE_3 = 1 << 1
     CHECK_SYSTEM = 1 << 2
@@ -42,6 +44,7 @@ class Leds(IntEnum):
 
 @unique
 class Keys(IntEnum):
+    """Key events which can be sent to the unit"""
     # Second word is the same on first down, 0000 every 100ms while holding
     LIGHTS = 0x0001
     AUX_1 = 0x0002
@@ -66,7 +69,7 @@ class AquaLogic(object):
     FRAME_ETX = 0x03
 
     FRAME_TYPE_KEY_EVENT = b'\x00\x03'
-    FRAME_TYPE_ON_OFF_EVENT = b'\x00\x05'   # only works for some keys
+    FRAME_TYPE_ON_OFF_EVENT = b'\x00\x05'   # Seems to only work for some keys
 
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
     FRAME_TYPE_LEDS = b'\x01\x02'
@@ -85,14 +88,14 @@ class AquaLogic(object):
         self._salt_level = None
         self._check_system_msg = None
         self._pump_speed = None
-        self._leds = 0
+        self._states = 0
         self._send_queue = queue.Queue()
 
-    def check_led_state(self, data):
-        if self.is_led_enabled(data['led']) == data['enabled']:
+    def check_state(self, data):
+        if self.get_state(data['state']) == data['enabled']:
             data['retries'] -= 1
             if data['retries'] != 0:
-                # The LED state hasn't changed; re-queue the request
+                # The state hasn't changed; re-queue the request
                 self._send_queue.put(data)
 
     def process(self):
@@ -169,13 +172,14 @@ class AquaLogic(object):
                 _LOGGER.info('Key: %s', binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
                 _LOGGER.debug('LEDs: %s', binascii.hexlify(frame))
-                leds = int.from_bytes(frame[0:4], byteorder='little')
-                if leds != self._leds:
-                    self._leds = leds;
+                # First 4 bytes are the LEDs that are on or flashing;
+                # second 4 bytes are the LEDs that are flashing
+                on = int.from_bytes(frame[0:4], byteorder='little')
+                flashing = int.from_bytes(frame[4:8], byteorder='little')
+                states = on | flashing
+                if states != self._states:
+                    self._states = states;
                     zope.event.notify(self)
-                for led in Leds:
-                    if led.value & self._leds != 0:
-                        _LOGGER.debug(led)
             elif frame_type == self.FRAME_TYPE_PUMP_SPEED:
                 value = int.from_bytes(frame[0:2], byteorder='big')
                 if self._pump_speed != value:
@@ -244,9 +248,7 @@ class AquaLogic(object):
             if c == self.FRAME_DLE:
                 frame.append(0)
 
-    def queue_key(self, key):
-        """Queues a key for sending."""
-        _LOGGER.info('Sending key %s', key)
+    def get_key_event_frame(self, key):
         frame = bytearray()
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_STX)
@@ -263,19 +265,16 @@ class AquaLogic(object):
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_ETX)
 
-        # See if this key has a corresponding LED.
-        led = None
-        enabled = False
-        try:
-            led = Leds[key.name]
-            enabled = self.is_led_enabled(led)
-        except KeyError:
-            pass
+        return frame
 
+    def send_key(self, key):
+        """Sends a key."""
+        _LOGGER.info('Queueing key %s', key)
+        frame = self.get_key_event_frame(key)
+        
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
-        self._send_queue.put({'frame': frame, 'led': led, 
-            'enabled': enabled, 'retries': 5})
+        self._send_queue.put({'frame': frame})
 
     @property
     def air_temp(self):
@@ -311,9 +310,11 @@ class AquaLogic(object):
     
     @property
     def check_system_msg(self):
-        """Returns the current 'Check System message, or None if unknown.
-        Only valid when Leds.CHECK_SYSTEM is on."""
-        return self._check_system_msg
+        """Returns the current 'Check System message, or None if unknown."""
+        if self.get_state(States.CHECK_SYSTEM):
+            return self._check_system_msg
+        else:
+            return None
 
     @property
     def pump_speed(self):
@@ -326,15 +327,42 @@ class AquaLogic(object):
         are in Metric."""
         return self._is_metric
     
-    def leds(self):
+    def states(self):
         list = []
-        """Returns a set containing the enabled LEDs."""
-        for e in Leds:
-            if e.value & self._leds != 0:
+        """Returns a set containing the enabled states."""
+        for e in States:
+            if e.value & self._states != 0:
                 list.append(e)
         return list
 
-    def is_led_enabled(self, led):
-        """Returns True if the specified LED is enabled."""
-        return (led.value & self._leds) != 0
+    def get_state(self, state):
+        """Returns True if the specified state is enabled."""
+        # Check to see if we have a change request pending; if we do
+        # return the value we expect it to change to.
+        for data in list(self._send_queue.queue):
+            if data['state'] == state:
+                return not data['enabled']
+        return (state.value & self._states) != 0
 
+    def set_state(self, state, enable):
+        """Set the state."""
+
+        isEnabled = get_state(state)
+        if isEnabled == enable:
+            return True
+
+        # See if this state has a corresponding Key
+        key = None
+        try:
+            key = Keys[state.name]
+        except KeyError:
+            # TODO: send the appropriate combination of keys
+            # to enable the state
+            return False
+
+        frame = self.get_key_event_frame(key)
+
+        # Queue it to send immediately following the reception
+        # of a keep-alive packet in an attempt to avoid bus collisions.
+        self._send_queue.put({'frame': frame, 'state': state, 
+            'enabled': isEnabled, 'retries': 5})
