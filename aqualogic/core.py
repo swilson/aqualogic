@@ -347,7 +347,7 @@ class AquaLogic(object):
     def set_state(self, state, enable):
         """Set the state."""
 
-        isEnabled = get_state(state)
+        isEnabled = self.get_state(state)
         if isEnabled == enable:
             return True
 
@@ -366,3 +366,5 @@ class AquaLogic(object):
         # of a keep-alive packet in an attempt to avoid bus collisions.
         self._send_queue.put({'frame': frame, 'state': state, 
             'enabled': isEnabled, 'retries': 5})
+
+        return True
