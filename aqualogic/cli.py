@@ -35,7 +35,7 @@ reader_thread.start()
 while True:
     line = input()
     try:
-        key = Keys[line]
-        aq.send_key(key)
+        state = States[line]
+        aq.set_state(state, not aq.get_state(state))
     except KeyError:
         print('Invalid key {}'.format(line))

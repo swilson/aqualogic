@@ -162,10 +162,12 @@ class AquaLogic(object):
                     self._writer.flush()
                     _LOGGER.info('Sent: %s', binascii.hexlify(data['frame']))
 
-                    if data['led'] != None:
-                        # Set a timer to verify the LED state changes
-                        _LOGGER.debug('setting timer')
-                        Timer(1.0, self.check_led_state, [data]).start()
+                    try:
+                        if data['state'] != None:
+                            # Set a timer to verify the state changes
+                            Timer(1.0, self.check_state, [data]).start()
+                    except KeyError:
+                        pass
 
                 continue
             elif frame_type == self.FRAME_TYPE_KEY_EVENT:
