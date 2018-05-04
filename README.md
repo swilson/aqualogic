@@ -3,6 +3,7 @@ A python library to interface with Hayward/Goldline AquaLogic/ProLogic pool cont
 
 - [RS-485 Notes](https://github.com/swilson/aqualogic/wiki/RS%E2%80%90485-Notes)
 - [TriStar VS Pump Notes](https://github.com/swilson/aqualogic/wiki/TriStar-VS-Pump-Notes)
+- [Upgrading the AquaLogic Firmware](https://github.com/swilson/aqualogic/wiki/Upgrading-the-AquaLogic-Firmware)
 
 Warning: work-in-progress
 
