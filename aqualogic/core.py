@@ -74,7 +74,8 @@ class AquaLogic(object):
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
     FRAME_TYPE_LEDS = b'\x01\x02'
     FRAME_TYPE_DISPLAY_UPDATE = b'\x01\x03'
-    FRAME_TYPE_PUMP_SPEED = b'\x0c\x01'
+    FRAME_TYPE_PUMP_SPEED_REQUEST = b'\x0c\x01'
+    FRAME_TYPE_PUMP_STATUS = b'\x00\x0c'
 
     def __init__(self, reader, writer):
         self._reader = reader
@@ -88,6 +89,7 @@ class AquaLogic(object):
         self._salt_level = None
         self._check_system_msg = None
         self._pump_speed = None
+        self._pump_power = None
         self._states = 0
         self._send_queue = queue.Queue()
 
@@ -182,10 +184,22 @@ class AquaLogic(object):
                 if states != self._states:
                     self._states = states;
                     zope.event.notify(self)
-            elif frame_type == self.FRAME_TYPE_PUMP_SPEED:
+            elif frame_type == self.FRAME_TYPE_PUMP_SPEED_REQUEST:
                 value = int.from_bytes(frame[0:2], byteorder='big')
+                _LOGGER.debug('Pump speed request: %d%%', value)
                 if self._pump_speed != value:
                     self._pump_speed = value
+                    zope.event.notify(self)
+            elif frame_type == self.FRAME_TYPE_PUMP_STATUS:
+                speed = frame[2]
+                # Power is in BCD
+                power = (((frame[3] & 0xf0) >> 4) * 1000) \
+                      + (((frame[3] & 0x0f)     ) * 100) \
+                      + (((frame[4] & 0xf0) >> 4) * 10) \
+                      + (((frame[4] & 0x0f)))
+                _LOGGER.debug('Pump speed: %d%%, power: %d watts', speed, power)
+                if self._pump_power != power:
+                    self._pump_power = power
                     zope.event.notify(self)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
@@ -322,6 +336,11 @@ class AquaLogic(object):
     def pump_speed(self):
         """Returns the current pump speed in percent, or None if unknown."""
         return self._pump_speed
+
+    @property
+    def pump_power(self):
+        """Returns the current pump power in watts, or None if unknown."""
+        return self._pump_power
 
     @property
     def is_metric(self):
