@@ -14,6 +14,7 @@ def data_changed(aq):
     print('Pool Temp: {}'.format(aq.pool_temp))
     print('Air Temp: {}'.format(aq.air_temp))
     print('Pump Speed: {}'.format(aq.pump_speed))
+    print('Pump Power: {}'.format(aq.pump_power))
     print('States: {}'.format(aq.states()))
     if aq.get_state(States.CHECK_SYSTEM):
         print('Check System: {}'.format(aq.check_system_msg))

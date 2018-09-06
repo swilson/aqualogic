@@ -2,7 +2,7 @@ from setuptools import setup
 setup(
   name = 'aqualogic',
   packages = ['aqualogic'], # this must be the same as the name above
-  version = '0.7',
+  version = '0.8',
   description = 'Library for interfacing with a Hayward/Goldline AquaLogic/ProLogic pool controller.',
   author = 'Sean Wilson',
   author_email = 'sean.wilson@live.ca',

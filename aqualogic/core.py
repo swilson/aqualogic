@@ -41,6 +41,7 @@ class States(IntEnum):
     AUX_13 = 1 << 23
     AUX_14 = 1 << 24
     SUPER_CHLORINATE = 1 << 25
+    FILTER_LOW_SPEED = 1 << 31  # This is a kludge for the low-speed filter
 
 @unique
 class Keys(IntEnum):
@@ -91,7 +92,9 @@ class AquaLogic(object):
         self._pump_speed = None
         self._pump_power = None
         self._states = 0
+        self._flashing_states = 0
         self._send_queue = queue.Queue()
+        self._multi_speed_pump = False
 
     def check_state(self, data):
         if self.get_state(data['state']) == data['enabled']:
@@ -167,7 +170,9 @@ class AquaLogic(object):
                     try:
                         if data['state'] != None:
                             # Set a timer to verify the state changes
-                            Timer(1.0, self.check_state, [data]).start()
+                            # Wait 5 seconds as it can take a while for
+                            # the state to change.
+                            Timer(5.0, self.check_state, [data]).start()
                     except KeyError:
                         pass
 
@@ -176,13 +181,14 @@ class AquaLogic(object):
                 _LOGGER.info('Key: %s', binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
                 _LOGGER.debug('LEDs: %s', binascii.hexlify(frame))
-                # First 4 bytes are the LEDs that are on or flashing;
+                # First 4 bytes are the LEDs that are on;
                 # second 4 bytes are the LEDs that are flashing
-                on = int.from_bytes(frame[0:4], byteorder='little')
-                flashing = int.from_bytes(frame[4:8], byteorder='little')
-                states = on | flashing
-                if states != self._states:
-                    self._states = states;
+                states = int.from_bytes(frame[0:4], byteorder='little')
+                flashing_states = int.from_bytes(frame[4:8], byteorder='little')
+                states |= flashing_states
+                if states != self._states or flashing_states != self._flashing_states:
+                    self._states = states
+                    self._flashing_states = flashing_states
                     zope.event.notify(self)
             elif frame_type == self.FRAME_TYPE_PUMP_SPEED_REQUEST:
                 value = int.from_bytes(frame[0:2], byteorder='big')
@@ -191,6 +197,8 @@ class AquaLogic(object):
                     self._pump_speed = value
                     zope.event.notify(self)
             elif frame_type == self.FRAME_TYPE_PUMP_STATUS:
+                # Pump status messages sent out by Hayward VSP pumps
+                self._multi_speed_pump = True
                 speed = frame[2]
                 # Power is in BCD
                 power = (((frame[3] & 0xf0) >> 4) * 1000) \
@@ -326,20 +334,30 @@ class AquaLogic(object):
     
     @property
     def check_system_msg(self):
-        """Returns the current 'Check System message, or None if unknown."""
+        """Returns the current 'Check System' message, or None if unknown."""
         if self.get_state(States.CHECK_SYSTEM):
             return self._check_system_msg
         else:
             return None
 
     @property
+    def status(self):
+        """Returns 'OK' or the current 'Check System' message."""
+        if self.get_state(States.CHECK_SYSTEM):
+            return self._check_system_msg
+        else:
+            return 'OK'
+
+    @property
     def pump_speed(self):
-        """Returns the current pump speed in percent, or None if unknown."""
+        """Returns the current pump speed in percent, or None if unknown.
+           Requires a Hayward VSP pump connected to the AquaLogic bus."""
         return self._pump_speed
 
     @property
     def pump_power(self):
-        """Returns the current pump power in watts, or None if unknown."""
+        """Returns the current pump power in watts, or None if unknown.
+           Requires a Hayward VSP pump connected to the AquaLogic bus."""
         return self._pump_power
 
     @property
@@ -354,6 +372,10 @@ class AquaLogic(object):
         for e in States:
             if e.value & self._states != 0:
                 list.append(e)
+
+        if (self._flashing_states & States.FILTER) != 0:
+            list.append(States.FILTER_LOW_SPEED)
+
         return list
 
     def get_state(self, state):
@@ -363,7 +385,10 @@ class AquaLogic(object):
         for data in list(self._send_queue.queue):
             if data['state'] == state:
                 return not data['enabled']
-        return (state.value & self._states) != 0
+        if state == States.FILTER_LOW_SPEED:
+            return (States.FILTER.value & self._flashing_states) != 0
+        else:
+            return (state.value & self._states) != 0
 
     def set_state(self, state, enable):
         """Set the state."""
@@ -372,14 +397,30 @@ class AquaLogic(object):
         if isEnabled == enable:
             return True
 
-        # See if this state has a corresponding Key
         key = None
-        try:
-            key = Keys[state.name]
-        except KeyError:
-            # TODO: send the appropriate combination of keys
-            # to enable the state
-            return False
+
+        if state == States.FILTER_LOW_SPEED:
+            if not self._multi_speed_pump:
+                return False
+            # Send the FILTER key once.
+            # If the pump is in high speed, it wil switch to low speed.
+            # If the pump is off the retry mechanism will send an additional
+            # FILTER key to switch into low speed.
+            # If the pump is in low speed then we pretend the pump is off;
+            # the retry mechanism will send an additional FILTER key
+            # to switch into high speed.
+            key = Keys.FILTER
+            if isEnabled:
+                state = States.FILTER
+                isEnabled = False
+        else:
+            # See if this state has a corresponding Key
+            try:
+                key = Keys[state.name]
+            except KeyError:
+                # TODO: send the appropriate combination of keys
+                # to enable the state
+                return False
 
         frame = self.get_key_event_frame(key)
 
@@ -388,4 +429,9 @@ class AquaLogic(object):
         self._send_queue.put({'frame': frame, 'state': state, 
             'enabled': isEnabled, 'retries': 5})
 
+        return True
+
+    def enable_multi_speed_pump(self, enable):
+        """Enables multi-speed pump mode."""
+        self._multi_speed_pump = enable
         return True
