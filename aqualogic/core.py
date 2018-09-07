@@ -97,11 +97,12 @@ class AquaLogic(object):
         self._multi_speed_pump = False
 
     def check_state(self, data):
-        if self.get_state(data['state']) == data['enabled']:
-            data['retries'] -= 1
-            if data['retries'] != 0:
+        desiredStates = data['desiredStates']
+        for x in desiredStates:
+            if self.get_state(x['state']) != x['enabled']:
                 # The state hasn't changed; re-queue the request
                 self._send_queue.put(data)
+                return 
 
     def process(self):
         """Process data; returns when the reader signals EOF."""
@@ -168,11 +169,11 @@ class AquaLogic(object):
                     _LOGGER.info('Sent: %s', binascii.hexlify(data['frame']))
 
                     try:
-                        if data['state'] != None:
+                        if data['desiredStates'] != None:
                             # Set a timer to verify the state changes
-                            # Wait 5 seconds as it can take a while for
+                            # Wait 2 seconds as it can take a while for
                             # the state to change.
-                            Timer(5.0, self.check_state, [data]).start()
+                            Timer(2.0, self.check_state, [data]).start()
                     except KeyError:
                         pass
 
@@ -383,8 +384,10 @@ class AquaLogic(object):
         # Check to see if we have a change request pending; if we do
         # return the value we expect it to change to.
         for data in list(self._send_queue.queue):
-            if data['state'] == state:
-                return not data['enabled']
+            desiredStates = data['desiredStates']
+            for x in desiredStates:
+                if x['state'] == state:
+                    return x['enabled']
         if state == States.FILTER_LOW_SPEED:
             return (States.FILTER.value & self._flashing_states) != 0
         else:
@@ -398,6 +401,7 @@ class AquaLogic(object):
             return True
 
         key = None
+        desiredStates = [{'state':state, 'enabled':not isEnabled}]
 
         if state == States.FILTER_LOW_SPEED:
             if not self._multi_speed_pump:
@@ -410,9 +414,7 @@ class AquaLogic(object):
             # the retry mechanism will send an additional FILTER key
             # to switch into high speed.
             key = Keys.FILTER
-            if isEnabled:
-                state = States.FILTER
-                isEnabled = False
+            desiredStates.append({'state':States.FILTER, 'enabled':True})
         else:
             # See if this state has a corresponding Key
             try:
@@ -426,8 +428,8 @@ class AquaLogic(object):
 
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
-        self._send_queue.put({'frame': frame, 'state': state, 
-            'enabled': isEnabled, 'retries': 5})
+        self._send_queue.put({'frame': frame, 'desiredStates': desiredStates, 
+            'retries': 10})
 
         return True
 
