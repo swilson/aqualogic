@@ -2,8 +2,9 @@ from setuptools import setup
 setup(
   name = 'aqualogic',
   packages = ['aqualogic'], # this must be the same as the name above
-  version = '0.9',
+  version = '0.10',
   description = 'Library for interfacing with a Hayward/Goldline AquaLogic/ProLogic pool controller.',
+  long_description = 'A python library to interface with Hayward/Goldline AquaLogic/ProLogic pool controllers. Note that the Goldline protocol uses RS-485 so a hardware interface that can provide the library with reader and writer file objects is required. The simplest solution for this is an RS-485 to Ethernet adapter connected via a socket.'
   author = 'Sean Wilson',
   author_email = 'sean.wilson@live.ca',
   url = 'https://github.com/swilson/aqualogic',
