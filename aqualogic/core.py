@@ -100,9 +100,12 @@ class AquaLogic(object):
         desiredStates = data['desiredStates']
         for x in desiredStates:
             if self.get_state(x['state']) != x['enabled']:
-                # The state hasn't changed; re-queue the request
-                self._send_queue.put(data)
-                return 
+                # The state hasn't changed
+                data['retries'] -= 1
+                if data['retries'] != 0:
+                    # Re-queue the request
+                    self._send_queue.put(data)
+                    return 
 
     def process(self):
         """Process data; returns when the reader signals EOF."""
@@ -153,7 +156,7 @@ class AquaLogic(object):
                 calculated_crc += b
             
             if (frame_crc != calculated_crc):
-                logging.warning('Bad CRC')
+                _LOGGER.warning('Bad CRC')
                 continue
 
             frame_type = frame[0:2]
@@ -429,7 +432,7 @@ class AquaLogic(object):
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
         self._send_queue.put({'frame': frame, 'desiredStates': desiredStates, 
-            'retries': 10})
+                             'retries': 10})
 
         return True
 
