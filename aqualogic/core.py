@@ -1,4 +1,4 @@
-"""A library to interface with a Hayward/Goldline AquaLogic/ProLogic 
+"""A library to interface with a Hayward/Goldline AquaLogic/ProLogic
 pool controller."""
 
 from enum import IntEnum, unique
@@ -10,6 +10,7 @@ import time
 import queue
 
 _LOGGER = logging.getLogger(__name__)
+
 
 @unique
 class States(IntEnum):
@@ -43,6 +44,7 @@ class States(IntEnum):
     SUPER_CHLORINATE = 1 << 25
     FILTER_LOW_SPEED = 1 << 31  # This is a kludge for the low-speed filter
 
+
 @unique
 class Keys(IntEnum):
     """Key events which can be sent to the unit"""
@@ -63,6 +65,7 @@ class Keys(IntEnum):
     PLUS = 0x2000
     POOL_SPA = 0x4000
     FILTER = 0x8000
+
 
 class AquaLogic(object):
     FRAME_DLE = 0x10
@@ -105,7 +108,7 @@ class AquaLogic(object):
                 if data['retries'] != 0:
                     # Re-queue the request
                     self._send_queue.put(data)
-                    return 
+                    return
 
     def process(self):
         """Process data; returns when the reader signals EOF."""
@@ -146,7 +149,7 @@ class AquaLogic(object):
 
                 frame.append(b[0])
                 b = self._reader.read(1)
-            
+
             # Verify CRC
             frame_crc = int.from_bytes(frame[-2:], byteorder='big')
             frame = frame[:-2]
@@ -154,7 +157,7 @@ class AquaLogic(object):
             calculated_crc = self.FRAME_DLE + self.FRAME_STX
             for b in frame:
                 calculated_crc += b
-            
+
             if (frame_crc != calculated_crc):
                 _LOGGER.warning('Bad CRC')
                 continue
@@ -172,7 +175,7 @@ class AquaLogic(object):
                     _LOGGER.info('Sent: %s', binascii.hexlify(data['frame']))
 
                     try:
-                        if data['desiredStates'] != None:
+                        if data['desiredStates'] is not None:
                             # Set a timer to verify the state changes
                             # Wait 2 seconds as it can take a while for
                             # the state to change.
@@ -188,9 +191,11 @@ class AquaLogic(object):
                 # First 4 bytes are the LEDs that are on;
                 # second 4 bytes are the LEDs that are flashing
                 states = int.from_bytes(frame[0:4], byteorder='little')
-                flashing_states = int.from_bytes(frame[4:8], byteorder='little')
+                flashing_states = int.from_bytes(frame[4:8],
+                                                 byteorder='little')
                 states |= flashing_states
-                if states != self._states or flashing_states != self._flashing_states:
+                if (states != self._states
+                        or flashing_states != self._flashing_states):
                     self._states = states
                     self._flashing_states = flashing_states
                     zope.event.notify(self)
@@ -205,11 +210,12 @@ class AquaLogic(object):
                 self._multi_speed_pump = True
                 speed = frame[2]
                 # Power is in BCD
-                power = (((frame[3] & 0xf0) >> 4) * 1000) \
-                      + (((frame[3] & 0x0f)     ) * 100) \
-                      + (((frame[4] & 0xf0) >> 4) * 10) \
-                      + (((frame[4] & 0x0f)))
-                _LOGGER.debug('Pump speed: %d%%, power: %d watts', speed, power)
+                power = ((((frame[3] & 0xf0) >> 4) * 1000)
+                         + (((frame[3] & 0x0f)) * 100)
+                         + (((frame[4] & 0xf0) >> 4) * 10)
+                         + (((frame[4] & 0x0f))))
+                _LOGGER.debug('Pump speed: %d%%, power: %d watts',
+                              speed, power)
                 if self._pump_power != power:
                     self._pump_power = power
                     zope.event.notify(self)
@@ -217,7 +223,7 @@ class AquaLogic(object):
                 parts = frame.decode('latin-1').split()
                 _LOGGER.debug('Display update: %s', parts)
 
-                try: 
+                try:
                     if parts[0] == 'Pool' and parts[1] == 'Temp':
                         # Pool Temp <temp>°[C|F]
                         value = int(parts[2][:-2])
@@ -267,8 +273,9 @@ class AquaLogic(object):
                 except ValueError:
                     pass
             else:
-                _LOGGER.info('Unknown frame: %s %s', 
-                    binascii.hexlify(frame_type), binascii.hexlify(frame))
+                _LOGGER.info('Unknown frame: %s %s',
+                             binascii.hexlify(frame_type),
+                             binascii.hexlify(frame))
 
     def append_data(self, frame, data):
         for c in data:
@@ -284,7 +291,7 @@ class AquaLogic(object):
         self.append_data(frame, self.FRAME_TYPE_KEY_EVENT)
         self.append_data(frame, key.value.to_bytes(2, byteorder='big'))
         self.append_data(frame, key.value.to_bytes(2, byteorder='big'))
-    
+
         crc = 0
         for b in frame:
             crc += b
@@ -299,7 +306,7 @@ class AquaLogic(object):
         """Sends a key."""
         _LOGGER.info('Queueing key %s', key)
         frame = self.get_key_event_frame(key)
-        
+
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
         self._send_queue.put({'frame': frame})
@@ -313,7 +320,7 @@ class AquaLogic(object):
     def pool_temp(self):
         """Returns the current pool temperature, or None if unknown."""
         return self._pool_temp
-    
+
     @property
     def spa_temp(self):
         """Returns the current spa temperature, or None if unknown."""
@@ -321,21 +328,21 @@ class AquaLogic(object):
 
     @property
     def pool_chlorinator(self):
-        """Returns the current pool chlorinator level in %, 
+        """Returns the current pool chlorinator level in %,
         or None if unknown."""
         return self._pool_chlorinator
 
     @property
     def spa_chlorinator(self):
-        """Returns the current spa chlorinator level in %, 
+        """Returns the current spa chlorinator level in %,
         or None if unknown."""
         return self._spa_chlorinator
-    
+
     @property
     def salt_level(self):
         """Returns the current salt level, or None if unknown."""
         return self._salt_level
-    
+
     @property
     def check_system_msg(self):
         """Returns the current 'Check System' message, or None if unknown."""
@@ -366,10 +373,10 @@ class AquaLogic(object):
 
     @property
     def is_metric(self):
-        """Returns True if the temperature and salt level values 
+        """Returns True if the temperature and salt level values
         are in Metric."""
         return self._is_metric
-    
+
     def states(self):
         list = []
         """Returns a set containing the enabled states."""
@@ -404,7 +411,7 @@ class AquaLogic(object):
             return True
 
         key = None
-        desiredStates = [{'state':state, 'enabled':not isEnabled}]
+        desiredStates = [{'state': state, 'enabled': not isEnabled}]
 
         if state == States.FILTER_LOW_SPEED:
             if not self._multi_speed_pump:
@@ -417,7 +424,7 @@ class AquaLogic(object):
             # the retry mechanism will send an additional FILTER key
             # to switch into high speed.
             key = Keys.FILTER
-            desiredStates.append({'state':States.FILTER, 'enabled':True})
+            desiredStates.append({'state': States.FILTER, 'enabled': True})
         else:
             # See if this state has a corresponding Key
             try:
@@ -431,7 +438,7 @@ class AquaLogic(object):
 
         # Queue it to send immediately following the reception
         # of a keep-alive packet in an attempt to avoid bus collisions.
-        self._send_queue.put({'frame': frame, 'desiredStates': desiredStates, 
+        self._send_queue.put({'frame': frame, 'desiredStates': desiredStates,
                              'retries': 10})
 
         return True

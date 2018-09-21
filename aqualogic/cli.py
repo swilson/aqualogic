@@ -8,7 +8,8 @@ import logging
 import sys
 
 logging.basicConfig(level=logging.INFO)
-PORT=23
+PORT = 23
+
 
 def data_changed(aq):
     print('Pool Temp: {}'.format(aq.pool_temp))
@@ -18,6 +19,7 @@ def data_changed(aq):
     print('States: {}'.format(aq.states()))
     if aq.get_state(States.CHECK_SYSTEM):
         print('Check System: {}'.format(aq.check_system_msg))
+
 
 print('Connecting to {}:{}...'.format(sys.argv[1], PORT))
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
