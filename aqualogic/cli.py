@@ -6,7 +6,6 @@ import sys
 from core import AquaLogic, States
 
 logging.basicConfig(level=logging.INFO)
-PORT = 23
 
 
 def _data_changed(panel):
@@ -19,10 +18,15 @@ def _data_changed(panel):
         print('Check System: {}'.format(panel.check_system_msg))
 
 
+if len(sys.argv) != 3:
+    print('Usage: cli [host] [port]')
+    quit()
+
 PANEL = AquaLogic()
-print('Connecting to {}:{}...'.format(sys.argv[1], PORT))
-PANEL.connect(sys.argv[1], PORT)
+print('Connecting to {}:{}...'.format(sys.argv[1], sys.argv[2]))
+PANEL.connect(sys.argv[1], int(sys.argv[2]))
 print('Connected!')
+print('To toggle a state, type in the State name, e.g. LIGHTS')
 
 READER_THREAD = threading.Thread(target=PANEL.process, args=[_data_changed])
 READER_THREAD.start()
@@ -33,4 +37,4 @@ while True:
         STATE = States[LINE]
         PANEL.set_state(STATE, not PANEL.get_state(STATE))
     except KeyError:
-        print('Invalid key {}'.format(LINE))
+        print('Invalid State name {}'.format(LINE))
