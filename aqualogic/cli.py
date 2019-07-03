@@ -1,41 +1,40 @@
 """aqualogic command line test app."""
 
-from core import AquaLogic, Keys, States
-import zope.event
-import socket
 import threading
 import logging
 import sys
+from core import AquaLogic, States
 
 logging.basicConfig(level=logging.INFO)
-PORT=23
 
-def data_changed(aq):
-    print('Pool Temp: {}'.format(aq.pool_temp))
-    print('Air Temp: {}'.format(aq.air_temp))
-    print('Pump Speed: {}'.format(aq.pump_speed))
-    print('States: {}'.format(aq.states()))
-    if aq.get_state(States.CHECK_SYSTEM):
-        print('Check System: {}'.format(aq.check_system_msg))
 
-print('Connecting to {}:{}...'.format(sys.argv[1], PORT))
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((sys.argv[1], PORT))
-reader = s.makefile(mode='rb')
-writer = s.makefile(mode='wb')
+def _data_changed(panel):
+    print('Pool Temp: {}'.format(panel.pool_temp))
+    print('Air Temp: {}'.format(panel.air_temp))
+    print('Pump Speed: {}'.format(panel.pump_speed))
+    print('Pump Power: {}'.format(panel.pump_power))
+    print('States: {}'.format(panel.states()))
+    if panel.get_state(States.CHECK_SYSTEM):
+        print('Check System: {}'.format(panel.check_system_msg))
+
+
+if len(sys.argv) != 3:
+    print('Usage: cli [host] [port]')
+    quit()
+
+PANEL = AquaLogic()
+print('Connecting to {}:{}...'.format(sys.argv[1], sys.argv[2]))
+PANEL.connect(sys.argv[1], int(sys.argv[2]))
 print('Connected!')
+print('To toggle a state, type in the State name, e.g. LIGHTS')
 
-aq = AquaLogic(reader, writer)
-
-zope.event.subscribers.append(data_changed)
-
-reader_thread = threading.Thread(target=aq.process)
-reader_thread.start()
+READER_THREAD = threading.Thread(target=PANEL.process, args=[_data_changed])
+READER_THREAD.start()
 
 while True:
-    line = input()
+    LINE = input()
     try:
-        state = States[line]
-        aq.set_state(state, not aq.get_state(state))
+        STATE = States[LINE]
+        PANEL.set_state(STATE, not PANEL.get_state(STATE))
     except KeyError:
-        print('Invalid key {}'.format(line))
+        print('Invalid State name {}'.format(LINE))

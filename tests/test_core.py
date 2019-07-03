@@ -8,10 +8,13 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 class TestAquaLogic(object):
+    def data_changed(self, aq):
+        pass
+
     def test_pool(self):
         reader = FileIO('tests/data/pool_on.bin')
         aq = AquaLogic(reader, None)
-        aq.process()
+        aq.process(self.data_changed)
         # Yes it was cold out when I grabbed this data
         assert aq.is_metric
         assert aq.air_temp == -6
@@ -23,11 +26,12 @@ class TestAquaLogic(object):
         assert aq.get_state(States.POOL)
         assert aq.get_state(States.FILTER)
         assert not aq.get_state(States.SPA)
-    
+
+
     def test_spa(self):
         reader = FileIO('tests/data/spa_on.bin')
         aq = AquaLogic(reader, None)
-        aq.process()
+        aq.process(self.data_changed)
         assert aq.is_metric
         assert aq.air_temp == -6
         assert aq.pool_temp == None
