@@ -243,7 +243,7 @@ class AquaLogic():
                 if self._pump_speed != value:
                     self._pump_speed = value
                     data_changed_callback(self)
-            elif frame_type == self.FRAME_TYPE_PUMP_STATUS:
+            elif (frame_type == self.FRAME_TYPE_PUMP_STATUS) & (len(frame) >= 5):
                 # Pump status messages sent out by Hayward VSP pumps
                 self._multi_speed_pump = True
                 speed = frame[2]
