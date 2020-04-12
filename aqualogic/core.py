@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """A library to interface with a Hayward/Goldline AquaLogic/ProLogic
 pool controller."""
 
@@ -7,6 +8,7 @@ import binascii
 import logging
 import queue
 import socket
+import time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +70,7 @@ class Keys(IntEnum):
 
 class AquaLogic():
     """Hayward/Goldline AquaLogic/ProLogic pool controller."""
+
     # pylint: disable=too-many-instance-attributes
     FRAME_DLE = 0x10
     FRAME_STX = 0x02
@@ -118,6 +121,7 @@ class AquaLogic():
                 data['retries'] -= 1
                 if data['retries'] != 0:
                     # Re-queue the request
+                    _LOGGER.debug('requeue')
                     self._send_queue.put(data)
                     return
 
@@ -127,13 +131,27 @@ class AquaLogic():
         Callback is notified when any data changes."""
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         while True:
+            # Data framing (from the AQ-CO-SERIAL manual):
+            #
+            # Each frame begins with a DLE (10H) and STX (02H) character start
+            # sequence, followed by a 2 to 61 byte long Command/Data field, a
+            # 2-byte Checksum and a DLE (10H) and ETX (03H) character end sequence.
+            #
+            # The DLE, STX and Command/Data fields are added together to provide the
+            # 2-byte Checksum. If any of the bytes of the Command/Data Field or
+            # Checksum are equal to the DLE character (10H), a NULL character (00H)
+            # is inserted into the transmitted data stream immediately after that byte.
+            # That NULL character must then be removed by the receiver.
+
             byte = self._reader.read(1)
+            frame_start_time = None
 
             while True:
                 # Search for FRAME_DLE + FRAME_STX
                 if not byte:
                     return
                 if byte[0] == self.FRAME_DLE:
+                    frame_start_time = time.monotonic()
                     next_byte = self._reader.read(1)
                     if not next_byte:
                         return
@@ -181,12 +199,15 @@ class AquaLogic():
 
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
+                _LOGGER.debug('%3.2f: KA', frame_start_time)
+
                 # If a frame has been queued for transmit, send it.
                 if not self._send_queue.empty():
                     data = self._send_queue.get(block=False)
                     self._writer.write(data['frame'])
                     self._writer.flush()
-                    _LOGGER.info('Sent: %s', binascii.hexlify(data['frame']))
+                    _LOGGER.info('%3.2f: Sent: %s', time.monotonic(), 
+                            binascii.hexlify(data['frame']))
 
                     try:
                         if data['desired_states'] is not None:
@@ -199,9 +220,11 @@ class AquaLogic():
 
                 continue
             elif frame_type == self.FRAME_TYPE_KEY_EVENT:
-                _LOGGER.info('Key: %s', binascii.hexlify(frame))
+                _LOGGER.debug('%3.2f: Key: %s', 
+                             frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
-                _LOGGER.debug('LEDs: %s', binascii.hexlify(frame))
+                _LOGGER.debug('%3.2f: LEDs: %s', 
+                              frame_start_time, binascii.hexlify(frame))
                 # First 4 bytes are the LEDs that are on;
                 # second 4 bytes_ are the LEDs that are flashing
                 states = int.from_bytes(frame[0:4], byteorder='little')
@@ -215,7 +238,8 @@ class AquaLogic():
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_PUMP_SPEED_REQUEST:
                 value = int.from_bytes(frame[0:2], byteorder='big')
-                _LOGGER.debug('Pump speed request: %d%%', value)
+                _LOGGER.debug('%3.2f: Pump speed request: %d%%', 
+                              frame_start_time, value)
                 if self._pump_speed != value:
                     self._pump_speed = value
                     data_changed_callback(self)
@@ -228,14 +252,15 @@ class AquaLogic():
                          + (((frame[3] & 0x0f)) * 100)
                          + (((frame[4] & 0xf0) >> 4) * 10)
                          + (((frame[4] & 0x0f))))
-                _LOGGER.debug('Pump speed: %d%%, power: %d watts',
-                              speed, power)
+                _LOGGER.debug('%3.2f; Pump speed: %d%%, power: %d watts',
+                              frame_start_time, speed, power)
                 if self._pump_power != power:
                     self._pump_power = power
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
-                _LOGGER.debug('Display update: %s', parts)
+                _LOGGER.debug('%3.2f: Display update: %s', 
+                              frame_start_time, parts)
 
                 try:
                     if parts[0] == 'Pool' and parts[1] == 'Temp':
@@ -287,7 +312,8 @@ class AquaLogic():
                 except ValueError:
                     pass
             else:
-                _LOGGER.info('Unknown frame: %s %s',
+                _LOGGER.info('%3.2f: Unknown frame: %s %s',
+                             frame_start_time,
                              binascii.hexlify(frame_type),
                              binascii.hexlify(frame))
 
