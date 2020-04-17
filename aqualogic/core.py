@@ -9,6 +9,7 @@ import logging
 import queue
 import socket
 import time
+import serial
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,11 +106,22 @@ class AquaLogic():
 
 
     def connect(self, host, port):
+        self.connect_socket(host, port)
+
+
+    def connect_socket(self, host, port):
         """Connects via a RS-485 to Ethernet adapter."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((host, port))
         self._reader = sock.makefile(mode='rb')
         self._writer = sock.makefile(mode='wb')
+
+    
+    def connect_serial(self, serial_port_name):
+        s = serial.Serial(port=serial_port_name, baudrate=19200, 
+                               stopbits=serial.STOPBITS_TWO)
+        self._reader = s
+        self._writer = s
 
 
     def _check_state(self, data):

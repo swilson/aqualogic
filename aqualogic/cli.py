@@ -19,13 +19,20 @@ def _data_changed(panel):
     #    print('Check System: {}'.format(panel.check_system_msg))
 
 
-if len(sys.argv) != 3:
+if len(sys.argv) == 2:
+    print('Connecting to {}...'.format(sys.argv[1]))
+elif len(sys.argv) == 3:
+    print('Connecting to {}:{}...'.format(sys.argv[1], sys.argv[2]))
+else:
     print('Usage: cli [host] [port]')
+    print('           [serial port]')
     quit()
 
 PANEL = AquaLogic()
-print('Connecting to {}:{}...'.format(sys.argv[1], sys.argv[2]))
-PANEL.connect(sys.argv[1], int(sys.argv[2]))
+if len(sys.argv) == 2:
+    PANEL.connect_serial(sys.argv[1])
+else:
+    PANEL.connect(sys.argv[1], int(sys.argv[2]))
 print('Connected!')
 print('To toggle a state, type in the State name, e.g. LIGHTS')
 
