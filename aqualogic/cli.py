@@ -5,18 +5,17 @@ import logging
 import sys
 from core import AquaLogic, States
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 def _data_changed(panel):
-    pass
-    #print('Pool Temp: {}'.format(panel.pool_temp))
-    #print('Air Temp: {}'.format(panel.air_temp))
-    #print('Pump Speed: {}'.format(panel.pump_speed))
-    #print('Pump Power: {}'.format(panel.pump_power))
-    #print('States: {}'.format(panel.states()))
-    #if panel.get_state(States.CHECK_SYSTEM):
-    #    print('Check System: {}'.format(panel.check_system_msg))
+    print('Pool Temp: {}'.format(panel.pool_temp))
+    print('Air Temp: {}'.format(panel.air_temp))
+    print('Pump Speed: {}'.format(panel.pump_speed))
+    print('Pump Power: {}'.format(panel.pump_power))
+    print('States: {}'.format(panel.states()))
+    if panel.get_state(States.CHECK_SYSTEM):
+        print('Check System: {}'.format(panel.check_system_msg))
 
 
 if len(sys.argv) == 2:

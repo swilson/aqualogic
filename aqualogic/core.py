@@ -83,6 +83,7 @@ class AquaLogic():
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
     FRAME_TYPE_LEDS = b'\x01\x02'
     FRAME_TYPE_DISPLAY_UPDATE = b'\x01\x03'
+    FRAME_TYPE_LONG_DISPLAY_UPDATE = b'\x04\x0a'
     FRAME_TYPE_PUMP_SPEED_REQUEST = b'\x0c\x01'
     FRAME_TYPE_PUMP_STATUS = b'\x00\x0c'
 
@@ -133,7 +134,7 @@ class AquaLogic():
                 data['retries'] -= 1
                 if data['retries'] != 0:
                     # Re-queue the request
-                    _LOGGER.debug('requeue')
+                    _LOGGER.info('requeue')
                     self._send_queue.put(data)
                     return
 
@@ -323,6 +324,9 @@ class AquaLogic():
                             data_changed_callback(self)
                 except ValueError:
                     pass
+            elif frame_type == self.FRAME_TYPE_LONG_DISPLAY_UPDATE:
+                # Not currently parsed
+                pass
             else:
                 _LOGGER.info('%3.2f: Unknown frame: %s %s',
                              frame_start_time,
