@@ -6,5 +6,6 @@ Since the Goldline protocol uses RS-485, a hardware interface is required. I'm u
 - [RS-485 Notes](https://github.com/swilson/aqualogic/wiki/RS%E2%80%90485-Notes)
 - [TriStar VS Pump Notes](https://github.com/swilson/aqualogic/wiki/TriStar-VS-Pump-Notes)
 - [Upgrading the AquaLogic Firmware](https://github.com/swilson/aqualogic/wiki/Upgrading-the-AquaLogic-Firmware)
+- [Wired Remote Repair](https://github.com/swilson/aqualogic/wiki/Wired-Remote-Repair)
 
 This project is not affiliated with or endorsed by Hayward Industries Inc. in any way. 
