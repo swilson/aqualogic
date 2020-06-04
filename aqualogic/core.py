@@ -51,22 +51,32 @@ class States(IntEnum):
 class Keys(IntEnum):
     """Key events which can be sent to the unit"""
     # Second word is the same on first down, 0000 every 100ms while holding
-    LIGHTS = 0x0001
-    AUX_1 = 0x0002
-    AUX_2 = 0x0004
-    AUX_3 = 0x0008
-    AUX_4 = 0x0010
-    AUX_5 = 0x0020
-    AUX_6 = 0x0040
-    AUX_7 = 0x0080
-    RIGHT = 0x0100
-    MENU = 0x0200
-    LEFT = 0x0400
-    SYSTEM_OFF = 0x0800
-    MINUS = 0x1000
-    PLUS = 0x2000
-    POOL_SPA = 0x4000
-    FILTER = 0x8000
+    RIGHT = 0x01000000
+    MENU = 0x02000000
+    LEFT = 0x04000000
+    SERVICE = 0x08000000
+    MINUS = 0x10000000
+    PLUS = 0x20000000
+    POOL_SPA = 0x40000000
+    FILTER = 0x80000000
+    LIGHTS = 0x00010000
+    AUX_1 = 0x00020000
+    AUX_2 = 0x00040000
+    AUX_3 = 0x00080000
+    AUX_4 = 0x00100000
+    AUX_5 = 0x00200000
+    AUX_6 = 0x00400000
+    AUX_7 = 0x00800000
+    VALVE_3 = 0x00000100
+    VALVE_4 = 0x00000200
+    HEATER_1 = 0x00000400
+    AUX_8 = 0x00000800
+    AUX_9 = 0x00001000
+    AUX_10 = 0x00002000
+    AUX_11 = 0x00004000
+    AUX_12 = 0x00008000
+    AUX_13 = 0x00000001
+    AUX_14 = 0x00000002
 
 
 class AquaLogic():
@@ -77,7 +87,8 @@ class AquaLogic():
     FRAME_STX = 0x02
     FRAME_ETX = 0x03
 
-    FRAME_TYPE_KEY_EVENT = b'\x00\x03'
+    FRAME_TYPE_WIRED_KEY_EVENT = b'\x00\x03'
+    FRAME_TYPE_WIRELESS_KEY_EVENT = b'\x00\x83'
     FRAME_TYPE_ON_OFF_EVENT = b'\x00\x05'   # Seems to only work for some keys
 
     FRAME_TYPE_KEEP_ALIVE = b'\x01\x01'
@@ -232,8 +243,11 @@ class AquaLogic():
                         pass
 
                 continue
-            elif frame_type == self.FRAME_TYPE_KEY_EVENT:
-                _LOGGER.debug('%3.2f: Key: %s', 
+            elif frame_type == self.FRAME_TYPE_WIRED_KEY_EVENT:
+                _LOGGER.debug('%3.2f: Wired Key: %s', 
+                             frame_start_time, binascii.hexlify(frame))
+            elif frame_type == self.FRAME_TYPE_WIRELESS_KEY_EVENT:
+                _LOGGER.debug('%3.2f: Wireless Key: %s', 
                              frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
                 _LOGGER.debug('%3.2f: LEDs: %s', 
@@ -344,9 +358,11 @@ class AquaLogic():
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_STX)
 
-        self._append_data(frame, self.FRAME_TYPE_KEY_EVENT)
-        self._append_data(frame, key.value.to_bytes(2, byteorder='big'))
-        self._append_data(frame, key.value.to_bytes(2, byteorder='big'))
+        self._append_data(frame, self.FRAME_TYPE_WIRELESS_KEY_EVENT)
+        self._append_data(frame, b'\x01')
+        self._append_data(frame, key.value.to_bytes(4, byteorder='big'))
+        self._append_data(frame, key.value.to_bytes(4, byteorder='big'))
+        self._append_data(frame, b'\x00')
 
         crc = 0
         for byte in frame:
