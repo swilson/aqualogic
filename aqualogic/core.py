@@ -44,6 +44,7 @@ class States(IntEnum):
     AUX_13 = 1 << 23
     AUX_14 = 1 << 24
     SUPER_CHLORINATE = 1 << 25
+    HEATER_AUTO_MODE = 1 << 30  # This is a kludge for the heater auto mode
     FILTER_LOW_SPEED = 1 << 31  # This is a kludge for the low-speed filter
 
 
@@ -51,14 +52,7 @@ class States(IntEnum):
 class Keys(IntEnum):
     """Key events which can be sent to the unit"""
     # Second word is the same on first down, 0000 every 100ms while holding
-    RIGHT = 0x01000000
-    MENU = 0x02000000
-    LEFT = 0x04000000
-    SERVICE = 0x08000000
-    MINUS = 0x10000000
-    PLUS = 0x20000000
-    POOL_SPA = 0x40000000
-    FILTER = 0x80000000
+    # Note WIRED_KEY_EVENTs only use the first 16-bits
     LIGHTS = 0x00010000
     AUX_1 = 0x00020000
     AUX_2 = 0x00040000
@@ -67,6 +61,15 @@ class Keys(IntEnum):
     AUX_5 = 0x00200000
     AUX_6 = 0x00400000
     AUX_7 = 0x00800000
+    RIGHT = 0x01000000
+    MENU = 0x02000000
+    LEFT = 0x04000000
+    SERVICE = 0x08000000
+    MINUS = 0x10000000
+    PLUS = 0x20000000
+    POOL_SPA = 0x40000000
+    FILTER = 0x80000000
+    # These are only valid for WIRELESS_KEY_EVENTs
     VALVE_3 = 0x00000100
     VALVE_4 = 0x00000200
     HEATER_1 = 0x00000400
@@ -115,6 +118,7 @@ class AquaLogic():
         self._flashing_states = 0
         self._send_queue = queue.Queue()
         self._multi_speed_pump = False
+        self._heater_auto_mode = True # Assume the heater is in auto mode
 
 
     def connect(self, host, port):
@@ -148,6 +152,27 @@ class AquaLogic():
                     _LOGGER.info('requeue')
                     self._send_queue.put(data)
                     return
+            else:
+                _LOGGER.debug('state change successful')
+
+
+
+    def _send_frame(self):
+        if not self._send_queue.empty():
+            data = self._send_queue.get(block=False)
+            self._writer.write(data['frame'])
+            self._writer.flush()
+            _LOGGER.info('%3.3f: Sent: %s', time.monotonic(), 
+                    binascii.hexlify(data['frame']))
+
+            try:
+                if data['desired_states'] is not None:
+                    # Set a timer to verify the state changes
+                    # Wait 2 seconds as it can take a while for
+                    # the state to change.
+                    Timer(2.0, self._check_state, [data]).start()
+            except KeyError:
+                pass
 
 
     def process(self, data_changed_callback):
@@ -223,41 +248,30 @@ class AquaLogic():
 
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
-                _LOGGER.debug('%3.2f: KA', frame_start_time)
+                #_LOGGER.debug('%3.3f: KA', frame_start_time)
 
                 # If a frame has been queued for transmit, send it.
                 if not self._send_queue.empty():
-                    data = self._send_queue.get(block=False)
-                    self._writer.write(data['frame'])
-                    self._writer.flush()
-                    _LOGGER.info('%3.2f: Sent: %s', time.monotonic(), 
-                            binascii.hexlify(data['frame']))
-
-                    try:
-                        if data['desired_states'] is not None:
-                            # Set a timer to verify the state changes
-                            # Wait 2 seconds as it can take a while for
-                            # the state to change.
-                            Timer(2.0, self._check_state, [data]).start()
-                    except KeyError:
-                        pass
+                    self._send_frame()
 
                 continue
             elif frame_type == self.FRAME_TYPE_WIRED_KEY_EVENT:
-                _LOGGER.debug('%3.2f: Wired Key: %s', 
+                _LOGGER.debug('%3.3f: Wired Key: %s', 
                              frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_WIRELESS_KEY_EVENT:
-                _LOGGER.debug('%3.2f: Wireless Key: %s', 
+                _LOGGER.debug('%3.3f: Wireless Key: %s', 
                              frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
-                _LOGGER.debug('%3.2f: LEDs: %s', 
-                              frame_start_time, binascii.hexlify(frame))
+                #_LOGGER.debug('%3.3f: LEDs: %s', 
+                #              frame_start_time, binascii.hexlify(frame))
                 # First 4 bytes are the LEDs that are on;
                 # second 4 bytes_ are the LEDs that are flashing
                 states = int.from_bytes(frame[0:4], byteorder='little')
                 flashing_states = int.from_bytes(frame[4:8],
                                                  byteorder='little')
                 states |= flashing_states
+                if self._heater_auto_mode:
+                    states |= States.HEATER_AUTO_MODE
                 if (states != self._states
                         or flashing_states != self._flashing_states):
                     self._states = states
@@ -265,7 +279,7 @@ class AquaLogic():
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_PUMP_SPEED_REQUEST:
                 value = int.from_bytes(frame[0:2], byteorder='big')
-                _LOGGER.debug('%3.2f: Pump speed request: %d%%', 
+                _LOGGER.debug('%3.3f: Pump speed request: %d%%', 
                               frame_start_time, value)
                 if self._pump_speed != value:
                     self._pump_speed = value
@@ -279,14 +293,14 @@ class AquaLogic():
                          + (((frame[3] & 0x0f)) * 100)
                          + (((frame[4] & 0xf0) >> 4) * 10)
                          + (((frame[4] & 0x0f))))
-                _LOGGER.debug('%3.2f; Pump speed: %d%%, power: %d watts',
+                _LOGGER.debug('%3.3f; Pump speed: %d%%, power: %d watts',
                               frame_start_time, speed, power)
                 if self._pump_power != power:
                     self._pump_power = power
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
-                _LOGGER.debug('%3.2f: Display update: %s', 
+                _LOGGER.debug('%3.3f: Display update: %s', 
                               frame_start_time, parts)
 
                 try:
@@ -336,13 +350,15 @@ class AquaLogic():
                         if self._check_system_msg != value:
                             self._check_system_msg = value
                             data_changed_callback(self)
+                    elif parts[0] == 'Heater1':
+                        self._heater_auto_mode = parts[1] == 'Auto'
                 except ValueError:
                     pass
             elif frame_type == self.FRAME_TYPE_LONG_DISPLAY_UPDATE:
                 # Not currently parsed
                 pass
             else:
-                _LOGGER.info('%3.2f: Unknown frame: %s %s',
+                _LOGGER.info('%3.3f: Unknown frame: %s %s',
                              frame_start_time,
                              binascii.hexlify(frame_type),
                              binascii.hexlify(frame))
@@ -480,7 +496,6 @@ class AquaLogic():
             return True
 
         key = None
-        desired_states = [{'state': state, 'enabled': not is_enabled}]
 
         if state == States.FILTER_LOW_SPEED:
             if not self._multi_speed_pump:
@@ -493,7 +508,18 @@ class AquaLogic():
             # the retry mechanism will send an additional FILTER key
             # to switch into high speed.
             key = Keys.FILTER
+            desired_states = [{'state': state, 'enabled': not is_enabled}]
             desired_states.append({'state': States.FILTER, 'enabled': True})
+        elif state == States.HEATER_AUTO_MODE:
+            key = Keys.HEATER_1
+            # Flip the heater mode
+            desired_states = [{'state': States.HEATER_AUTO_MODE, 'enabled': not self._heater_auto_mode}]
+        elif state == States.POOL or state == States.SPA:
+            key = Keys.POOL_SPA
+            desired_states = [{'state': state, 'enabled': not is_enabled}]
+        elif state == States.HEATER_1:
+            # TODO: is there a way to force the heater on? Perhaps press & hold?
+            return False
         else:
             # See if this state has a corresponding Key
             try:
@@ -502,6 +528,7 @@ class AquaLogic():
                 # TODO: send the appropriate combination of keys
                 # to enable the state
                 return False
+            desired_states = [{'state': state, 'enabled': not is_enabled}]
 
         frame = self._get_key_event_frame(key)
 
