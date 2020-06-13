@@ -52,34 +52,33 @@ class States(IntEnum):
 class Keys(IntEnum):
     """Key events which can be sent to the unit"""
     # Second word is the same on first down, 0000 every 100ms while holding
-    # Note WIRED_KEY_EVENTs only use the first 16-bits
-    LIGHTS = 0x00010000
-    AUX_1 = 0x00020000
-    AUX_2 = 0x00040000
-    AUX_3 = 0x00080000
-    AUX_4 = 0x00100000
-    AUX_5 = 0x00200000
-    AUX_6 = 0x00400000
-    AUX_7 = 0x00800000
-    RIGHT = 0x01000000
-    MENU = 0x02000000
-    LEFT = 0x04000000
-    SERVICE = 0x08000000
-    MINUS = 0x10000000
-    PLUS = 0x20000000
-    POOL_SPA = 0x40000000
-    FILTER = 0x80000000
+    RIGHT = 0x0001
+    MENU = 0x0002
+    LEFT = 0x0004
+    SERVICE = 0x0008
+    MINUS = 0x0010
+    PLUS = 0x0020
+    POOL_SPA = 0x0040
+    FILTER = 0x0080
+    LIGHTS = 0x0100
+    AUX_1 = 0x0200
+    AUX_2 = 0x0400
+    AUX_3 = 0x0800
+    AUX_4 = 0x1000
+    AUX_5 = 0x2000
+    AUX_6 = 0x4000
+    AUX_7 = 0x8000
     # These are only valid for WIRELESS_KEY_EVENTs
-    VALVE_3 = 0x00000100
-    VALVE_4 = 0x00000200
-    HEATER_1 = 0x00000400
-    AUX_8 = 0x00000800
-    AUX_9 = 0x00001000
-    AUX_10 = 0x00002000
-    AUX_11 = 0x00004000
-    AUX_12 = 0x00008000
-    AUX_13 = 0x00000001
-    AUX_14 = 0x00000002
+    VALVE_3 = 0x00010000
+    VALVE_4 = 0x00020000
+    HEATER_1 = 0x00040000
+    AUX_8 = 0x00080000
+    AUX_9 = 0x00100000
+    AUX_10 = 0x00200000
+    AUX_11 = 0x00400000
+    AUX_12 = 0x00800000
+    AUX_13 = 0x01000000
+    AUX_14 = 0x02000000
 
 
 class AquaLogic():
@@ -90,7 +89,11 @@ class AquaLogic():
     FRAME_STX = 0x02
     FRAME_ETX = 0x03
 
-    FRAME_TYPE_WIRED_KEY_EVENT = b'\x00\x03'
+    # Local wired panel (black face with service button)
+    FRAME_TYPE_LOCAL_WIRED_KEY_EVENT = b'\x00\x02'
+    # Remote wired panel (white face)
+    FRAME_TYPE_REMOTE_WIRED_KEY_EVENT = b'\x00\x03'
+    # Wireless remote
     FRAME_TYPE_WIRELESS_KEY_EVENT = b'\x00\x83'
     FRAME_TYPE_ON_OFF_EVENT = b'\x00\x05'   # Seems to only work for some keys
 
@@ -118,12 +121,10 @@ class AquaLogic():
         self._flashing_states = 0
         self._send_queue = queue.Queue()
         self._multi_speed_pump = False
-        self._heater_auto_mode = True # Assume the heater is in auto mode
-
+        self._heater_auto_mode = True  # Assume the heater is in auto mode
 
     def connect(self, host, port):
         self.connect_socket(host, port)
-
 
     def connect_socket(self, host, port):
         """Connects via a RS-485 to Ethernet adapter."""
@@ -132,13 +133,11 @@ class AquaLogic():
         self._reader = sock.makefile(mode='rb')
         self._writer = sock.makefile(mode='wb')
 
-    
     def connect_serial(self, serial_port_name):
-        s = serial.Serial(port=serial_port_name, baudrate=19200, 
-                               stopbits=serial.STOPBITS_TWO)
+        s = serial.Serial(port=serial_port_name, baudrate=19200,
+                          stopbits=serial.STOPBITS_TWO)
         self._reader = s
         self._writer = s
-
 
     def _check_state(self, data):
         desired_states = data['desired_states']
@@ -155,15 +154,13 @@ class AquaLogic():
             else:
                 _LOGGER.debug('state change successful')
 
-
-
     def _send_frame(self):
         if not self._send_queue.empty():
             data = self._send_queue.get(block=False)
             self._writer.write(data['frame'])
             self._writer.flush()
-            _LOGGER.info('%3.3f: Sent: %s', time.monotonic(), 
-                    binascii.hexlify(data['frame']))
+            _LOGGER.info('%3.3f: Sent: %s', time.monotonic(),
+                         binascii.hexlify(data['frame']))
 
             try:
                 if data['desired_states'] is not None:
@@ -174,7 +171,6 @@ class AquaLogic():
             except KeyError:
                 pass
 
-
     def process(self, data_changed_callback):
         """Process data; returns when the reader signals EOF.
         Callback is notified when any data changes."""
@@ -184,13 +180,15 @@ class AquaLogic():
             #
             # Each frame begins with a DLE (10H) and STX (02H) character start
             # sequence, followed by a 2 to 61 byte long Command/Data field, a
-            # 2-byte Checksum and a DLE (10H) and ETX (03H) character end sequence.
+            # 2-byte Checksum and a DLE (10H) and ETX (03H) character end
+            # sequence.
             #
-            # The DLE, STX and Command/Data fields are added together to provide the
-            # 2-byte Checksum. If any of the bytes of the Command/Data Field or
-            # Checksum are equal to the DLE character (10H), a NULL character (00H)
-            # is inserted into the transmitted data stream immediately after that byte.
-            # That NULL character must then be removed by the receiver.
+            # The DLE, STX and Command/Data fields are added together to
+            # provide the 2-byte Checksum. If any of the bytes of the
+            # Command/Data Field or Checksum are equal to the DLE character
+            # (10H), a NULL character (00H) is inserted into the transmitted
+            # data stream immediately after that byte. That NULL character
+            # must then be removed by the receiver.
 
             byte = self._reader.read(1)
             frame_start_time = None
@@ -248,21 +246,24 @@ class AquaLogic():
 
             if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
                 # Keep alive
-                #_LOGGER.debug('%3.3f: KA', frame_start_time)
+                # _LOGGER.debug('%3.3f: KA', frame_start_time)
 
                 # If a frame has been queued for transmit, send it.
                 if not self._send_queue.empty():
                     self._send_frame()
 
                 continue
-            elif frame_type == self.FRAME_TYPE_WIRED_KEY_EVENT:
-                _LOGGER.debug('%3.3f: Wired Key: %s', 
-                             frame_start_time, binascii.hexlify(frame))
+            elif frame_type == self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT:
+                _LOGGER.debug('%3.3f: Local Wired Key: %s',
+                              frame_start_time, binascii.hexlify(frame))
+            elif frame_type == self.FRAME_TYPE_REMOTE_WIRED_KEY_EVENT:
+                _LOGGER.debug('%3.3f: Remote Wired Key: %s',
+                              frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_WIRELESS_KEY_EVENT:
-                _LOGGER.debug('%3.3f: Wireless Key: %s', 
-                             frame_start_time, binascii.hexlify(frame))
+                _LOGGER.debug('%3.3f: Wireless Key: %s',
+                              frame_start_time, binascii.hexlify(frame))
             elif frame_type == self.FRAME_TYPE_LEDS:
-                #_LOGGER.debug('%3.3f: LEDs: %s', 
+                # _LOGGER.debug('%3.3f: LEDs: %s',
                 #              frame_start_time, binascii.hexlify(frame))
                 # First 4 bytes are the LEDs that are on;
                 # second 4 bytes_ are the LEDs that are flashing
@@ -272,27 +273,28 @@ class AquaLogic():
                 states |= flashing_states
                 if self._heater_auto_mode:
                     states |= States.HEATER_AUTO_MODE
-                if (states != self._states
-                        or flashing_states != self._flashing_states):
+                if (states != self._states or
+                        flashing_states != self._flashing_states):
                     self._states = states
                     self._flashing_states = flashing_states
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_PUMP_SPEED_REQUEST:
                 value = int.from_bytes(frame[0:2], byteorder='big')
-                _LOGGER.debug('%3.3f: Pump speed request: %d%%', 
+                _LOGGER.debug('%3.3f: Pump speed request: %d%%',
                               frame_start_time, value)
                 if self._pump_speed != value:
                     self._pump_speed = value
                     data_changed_callback(self)
-            elif (frame_type == self.FRAME_TYPE_PUMP_STATUS) & (len(frame) >= 5):
+            elif ((frame_type == self.FRAME_TYPE_PUMP_STATUS) and
+                  (len(frame) >= 5)):
                 # Pump status messages sent out by Hayward VSP pumps
                 self._multi_speed_pump = True
                 speed = frame[2]
                 # Power is in BCD
-                power = ((((frame[3] & 0xf0) >> 4) * 1000)
-                         + (((frame[3] & 0x0f)) * 100)
-                         + (((frame[4] & 0xf0) >> 4) * 10)
-                         + (((frame[4] & 0x0f))))
+                power = ((((frame[3] & 0xf0) >> 4) * 1000) +
+                         (((frame[3] & 0x0f)) * 100) +
+                         (((frame[4] & 0xf0) >> 4) * 10) +
+                         (((frame[4] & 0x0f))))
                 _LOGGER.debug('%3.3f; Pump speed: %d%%, power: %d watts',
                               frame_start_time, speed, power)
                 if self._pump_power != power:
@@ -300,7 +302,7 @@ class AquaLogic():
                     data_changed_callback(self)
             elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                 parts = frame.decode('latin-1').split()
-                _LOGGER.debug('%3.3f: Display update: %s', 
+                _LOGGER.debug('%3.3f: Display update: %s',
                               frame_start_time, parts)
 
                 try:
@@ -374,11 +376,16 @@ class AquaLogic():
         frame.append(self.FRAME_DLE)
         frame.append(self.FRAME_STX)
 
-        self._append_data(frame, self.FRAME_TYPE_WIRELESS_KEY_EVENT)
-        self._append_data(frame, b'\x01')
-        self._append_data(frame, key.value.to_bytes(4, byteorder='big'))
-        self._append_data(frame, key.value.to_bytes(4, byteorder='big'))
-        self._append_data(frame, b'\x00')
+        if key.value > 0xffff:
+            self._append_data(frame, self.FRAME_TYPE_WIRELESS_KEY_EVENT)
+            self._append_data(frame, b'\x01')
+            self._append_data(frame, key.value.to_bytes(4, byteorder='little'))
+            self._append_data(frame, key.value.to_bytes(4, byteorder='little'))
+            self._append_data(frame, b'\x00')
+        else:
+            self._append_data(frame, self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT)
+            self._append_data(frame, key.value.to_bytes(2, byteorder='little'))
+            self._append_data(frame, key.value.to_bytes(2, byteorder='little'))
 
         crc = 0
         for byte in frame:
@@ -513,12 +520,14 @@ class AquaLogic():
         elif state == States.HEATER_AUTO_MODE:
             key = Keys.HEATER_1
             # Flip the heater mode
-            desired_states = [{'state': States.HEATER_AUTO_MODE, 'enabled': not self._heater_auto_mode}]
+            desired_states = [{'state': States.HEATER_AUTO_MODE,
+                               'enabled': not self._heater_auto_mode}]
         elif state == States.POOL or state == States.SPA:
             key = Keys.POOL_SPA
             desired_states = [{'state': state, 'enabled': not is_enabled}]
         elif state == States.HEATER_1:
-            # TODO: is there a way to force the heater on? Perhaps press & hold?
+            # TODO: is there a way to force the heater on?
+            # Perhaps press & hold?
             return False
         else:
             # See if this state has a corresponding Key
