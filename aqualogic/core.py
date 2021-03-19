@@ -379,7 +379,7 @@ class AquaLogic():
                     # Not currently parsed
                     pass
                 else:
-                    _LOGGER.info('%3.3f: Unknown frame: %s %s',
+                    _LOGGER.debug('%3.3f: Unknown frame: %s %s',
                                  frame_start_time,
                                  binascii.hexlify(frame_type),
                                  binascii.hexlify(frame))
