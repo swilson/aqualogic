@@ -110,6 +110,7 @@ class AquaLogic():
     def __init__(self):
         self._socket = None
         self._serial = None
+        self._io = None
         self._is_metric = False
         self._air_temp = None
         self._pool_temp = None
@@ -142,6 +143,11 @@ class AquaLogic():
                           stopbits=serial.STOPBITS_TWO, timeout=self.READ_TIMEOUT)
         self._read = self._read_byte_from_serial
         self._write = self._write_to_serial
+    
+    def connect_io(self, io):
+        self._io = io
+        self._read = self._read_byte_from_io
+        self._write = self._write_to_io
 
     def _check_state(self, data):
         desired_states = data['desired_states']
@@ -168,12 +174,21 @@ class AquaLogic():
             raise serial.SerialTimeoutException()
         return data[0]
         
+    def _read_byte_from_io(self):
+        data = self._io.read(1)
+        if len(data) == 0:
+            raise EOFError()
+        return data[0]
+    
     def _write_to_socket(self, data):
         self._socket.send(data)
     
     def _write_to_serial(self, data):
         self._serial.send(data)
         self._serial.flush()
+        
+    def _write_to_io(self, data):
+        self._io.write(data)
         
     def _send_frame(self):
         if not self._send_queue.empty():
@@ -387,6 +402,8 @@ class AquaLogic():
             _LOGGER.info("socket timeout")
         except serial.SerialTimeoutException:
             _LOGGER.info("serial timeout")
+        except EOFError:
+            _LOGGER.info("eof")
 
     def _append_data(self, frame, data):
         for byte in data:

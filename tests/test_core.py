@@ -4,6 +4,7 @@ from aqualogic.core import AquaLogic, States
 from io import FileIO
 import pytest
 import logging
+import socket
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -12,8 +13,8 @@ class TestAquaLogic(object):
         pass
 
     def test_pool(self):
-        reader = FileIO('tests/data/pool_on.bin')
-        aq = AquaLogic(reader, None)
+        aq = AquaLogic()
+        aq.connect_io(FileIO('tests/data/pool_on.bin'))
         aq.process(self.data_changed)
         # Yes it was cold out when I grabbed this data
         assert aq.is_metric
@@ -29,8 +30,8 @@ class TestAquaLogic(object):
 
 
     def test_spa(self):
-        reader = FileIO('tests/data/spa_on.bin')
-        aq = AquaLogic(reader, None)
+        aq = AquaLogic()
+        aq.connect_io(FileIO('tests/data/spa_on.bin'))
         aq.process(self.data_changed)
         assert aq.is_metric
         assert aq.air_temp == -6
