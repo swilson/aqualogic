@@ -47,6 +47,7 @@ class WebServer():
         t.start();
 
     def text_updated(self, text):
+        _LOGGER.info(str.encode(text))
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, text)
 
     async def _root_handler(self, request):
