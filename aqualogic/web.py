@@ -24,7 +24,7 @@ class WebServer():
         except KeyboardInterrupt:
             pass
 
-    def start(self):
+    def start(self, port):
         self._loop = asyncio.get_event_loop()
 
         # Set up the HTTP server
@@ -36,8 +36,6 @@ class WebServer():
         runner = web.AppRunner(app)
         self._loop.run_until_complete(runner.setup())
 
-        port = 8080
-
         site = web.TCPSite(runner, '0.0.0.0', port)
         self._loop.run_until_complete(site.start())
 
@@ -47,7 +45,6 @@ class WebServer():
         t.start();
 
     def text_updated(self, text):
-        _LOGGER.info(str.encode(text))
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, text)
 
     async def _root_handler(self, request):
