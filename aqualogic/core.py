@@ -64,7 +64,7 @@ class AquaLogic():
         self._multi_speed_pump = False
         self._heater_auto_mode = True  # Assume the heater is in auto mode
 
-        if web_port:
+        if web_port and web_port != 0:
             # Start the web server
             self._web = WebServer(self)
             self._web.start(web_port)
