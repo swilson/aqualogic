@@ -3,6 +3,8 @@ A python library to interface with Hayward/Goldline AquaLogic/ProLogic pool cont
 
 Since the Goldline protocol uses RS-485, a hardware interface is required. I'm using an [RS-485 to Ethernet adapter](https://www.usriot.com/products/rs485-to-ethernet-converter.html), though you could use some other type of adapter (e.g. RS-485 to RS-232); the library supports both socket and serial connections.
 
+In addition to the API, the library also provides a rudimentary web interface. This allows the user to cycle through the menu system to perform manual tasks such as setting the heater temperature.
+
 - [RS-485 Notes](https://github.com/swilson/aqualogic/wiki/RS%E2%80%90485-Notes)
 - [TriStar VS Pump Notes](https://github.com/swilson/aqualogic/wiki/TriStar-VS-Pump-Notes)
 - [Upgrading the AquaLogic Firmware](https://github.com/swilson/aqualogic/wiki/Upgrading-the-AquaLogic-Firmware)
