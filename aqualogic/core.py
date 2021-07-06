@@ -12,74 +12,11 @@ import time
 import serial
 import datetime
 
+from web import WebServer
+from states import States
+from keys import Keys
+
 _LOGGER = logging.getLogger(__name__)
-
-
-@unique
-class States(IntEnum):
-    """States reported by the unit"""
-    # These correspond to the LEDs on the unit
-    HEATER_1 = 1 << 0
-    VALVE_3 = 1 << 1
-    CHECK_SYSTEM = 1 << 2
-    POOL = 1 << 3
-    SPA = 1 << 4
-    FILTER = 1 << 5
-    LIGHTS = 1 << 6
-    AUX_1 = 1 << 7
-    AUX_2 = 1 << 8
-    SERVICE = 1 << 9
-    AUX_3 = 1 << 10
-    AUX_4 = 1 << 11
-    AUX_5 = 1 << 12
-    AUX_6 = 1 << 13
-    VALVE_4 = 1 << 14
-    SPILLOVER = 1 << 15
-    SYSTEM_OFF = 1 << 16
-    AUX_7 = 1 << 17
-    AUX_8 = 1 << 18
-    AUX_9 = 1 << 19
-    AUX_10 = 1 << 20
-    AUX_11 = 1 << 21
-    AUX_12 = 1 << 22
-    AUX_13 = 1 << 23
-    AUX_14 = 1 << 24
-    SUPER_CHLORINATE = 1 << 25
-    HEATER_AUTO_MODE = 1 << 30  # This is a kludge for the heater auto mode
-    FILTER_LOW_SPEED = 1 << 31  # This is a kludge for the low-speed filter
-
-
-@unique
-class Keys(IntEnum):
-    """Key events which can be sent to the unit"""
-    # Second word is the same on first down, 0000 every 100ms while holding
-    RIGHT = 0x0001
-    MENU = 0x0002
-    LEFT = 0x0004
-    SERVICE = 0x0008
-    MINUS = 0x0010
-    PLUS = 0x0020
-    POOL_SPA = 0x0040
-    FILTER = 0x0080
-    LIGHTS = 0x0100
-    AUX_1 = 0x0200
-    AUX_2 = 0x0400
-    AUX_3 = 0x0800
-    AUX_4 = 0x1000
-    AUX_5 = 0x2000
-    AUX_6 = 0x4000
-    AUX_7 = 0x8000
-    # These are only valid for WIRELESS_KEY_EVENTs
-    VALVE_3 = 0x00010000
-    VALVE_4 = 0x00020000
-    HEATER_1 = 0x00040000
-    AUX_8 = 0x00080000
-    AUX_9 = 0x00100000
-    AUX_10 = 0x00200000
-    AUX_11 = 0x00400000
-    AUX_12 = 0x00800000
-    AUX_13 = 0x01000000
-    AUX_14 = 0x02000000
 
 
 class AquaLogic():
@@ -127,6 +64,9 @@ class AquaLogic():
         self._multi_speed_pump = False
         self._heater_auto_mode = True  # Assume the heater is in auto mode
 
+        self._web = WebServer(self)
+        self._web.start()
+    
     def connect(self, host, port):
         self.connect_socket(host, port)
 
@@ -335,9 +275,12 @@ class AquaLogic():
                         self._pump_power = power
                         data_changed_callback(self)
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
-                    parts = frame.decode('latin-1').split()
+                    text = frame.decode('latin-1')
+                    parts = text.split()
                     _LOGGER.debug('%3.3f: Display update: %s',
                                   frame_start_time, parts)
+
+                    self._web.text_updated(text)
 
                     try:
                         if parts[0] == 'Pool' and parts[1] == 'Temp':
