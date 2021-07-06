@@ -7,7 +7,7 @@ import websockets
 import threading
 import logging
 
-from keys import Keys
+from .keys import Keys
 
 _LOGGER = logging.getLogger(__name__)
 
