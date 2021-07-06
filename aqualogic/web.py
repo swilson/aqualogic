@@ -6,6 +6,7 @@ import asyncio
 import websockets
 import threading
 import logging
+import os
 
 from .keys import Keys
 
@@ -14,8 +15,9 @@ _LOGGER = logging.getLogger(__name__)
 
 class WebServer():
     def __init__(self, panel):
+        self._loop = asyncio.new_event_loop()
         self._panel = panel
-        self._msg_queue = asyncio.Queue()
+        self._msg_queue = asyncio.Queue(loop=self._loop)
 
     def _run_thread(self):
         asyncio.set_event_loop(self._loop)
@@ -25,8 +27,6 @@ class WebServer():
             pass
 
     def start(self, port):
-        self._loop = asyncio.get_event_loop()
-
         # Set up the HTTP server
         app = web.Application()
         
@@ -48,7 +48,7 @@ class WebServer():
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, text)
 
     async def _root_handler(self, request):
-        s = open('aqualogic/web.html', 'r')
+        s = open(os.path.join(os.path.dirname(__file__), 'web.html'), 'r')
         return web.Response(text=s.read(), content_type='text/html')
 
     async def _websocket_handler(self, request):
@@ -78,7 +78,8 @@ class WebServer():
                 _LOGGER.info('Invalid key name {}'.format(msg.data))
 
     async def _producer_handler(self, ws):
-        while not ws.closed:
+        while True:
             text = await self._msg_queue.get()
+            if ws.closed:
+                break
             await ws.send_str(text)
-            self._msg_queue.task_done()
