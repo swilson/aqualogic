@@ -287,7 +287,6 @@ class AquaLogic():
                           # Flashing values are encoded with bit 8 set
                           display_frame.append(0x7f & v)
                       text = display_frame.decode('utf-8')
-                      _LOGGER.display(f"display: {text}: {frame}")
                     except UnicodeDecodeError as e:
                       _LOGGER.info(f"decerr: {frame}: {e}")
                       continue
