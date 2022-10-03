@@ -278,9 +278,16 @@ class AquaLogic():
                         data_changed_callback(self)
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                     try:
-                      # Flashing values are encoded with bit 8 set
-                      ascii_frame = bytearray([x & 0x7f for x in frame])
-                      text = ascii_frame.decode('utf-8')
+                      display_frame = bytearray()
+                      for v in frame:
+                        if v == 0xdf or v == 0x5f:
+                          # Convert LCD-specific degree symbol and decode to utf-8
+                          display_frame.extend(b'\xc2\xb0')
+                        else:
+                          # Flashing values are encoded with bit 8 set
+                          display_frame.append(0x7f & v)
+                      text = display_frame.decode('utf-8')
+                      _LOGGER.display(f"display: {text}: {frame}")
                     except UnicodeDecodeError as e:
                       _LOGGER.info(f"decerr: {frame}: {e}")
                       continue
