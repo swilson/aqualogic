@@ -277,8 +277,20 @@ class AquaLogic():
                         self._pump_power = power
                         data_changed_callback(self)
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
-                    # Convert LCD-specific degree symbol and decode to utf-8
-                    text = frame.replace(b'\xdf', b'\xc2\xb0').decode('utf-8')
+                    try:
+                      display_frame = bytearray()
+                      for v in frame:
+                        if v == 0xdf or v == 0x5f:
+                          # Convert LCD-specific degree symbol and decode to utf-8
+                          display_frame.extend(b'\xc2\xb0')
+                        else:
+                          # Flashing values are encoded with bit 8 set
+                          display_frame.append(0x7f & v)
+                      text = display_frame.decode('utf-8')
+                    except UnicodeDecodeError as e:
+                      _LOGGER.info(f"decerr: {frame}: {e}")
+                      continue
+
                     parts = text.split()
                     _LOGGER.debug('%3.3f: Display update: %s',
                                   frame_start_time, parts)
