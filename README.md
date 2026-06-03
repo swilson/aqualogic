@@ -1,3 +1,5 @@
+# Deprecated
+I recommend using [aqualogic package at rs485_frame-examples](https://github.com/b3nj1/rs485_frame-examples) insteaed
 # aqualogic
 A python library to interface with Hayward/Goldline AquaLogic/ProLogic pool controllers. Based on Goldline prototol decoding work done by draythomp (http://www.desert-home.com/p/swimming-pool.html). Used by the [Home Assistant AquaLogic component](https://www.home-assistant.io/components/aqualogic/).
 
