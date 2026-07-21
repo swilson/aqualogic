@@ -29,5 +29,7 @@ setup(
   ],
   install_requires=[
     'pyserial',
-  ]  
+    'aiohttp',
+    'websockets',
+  ]
 )

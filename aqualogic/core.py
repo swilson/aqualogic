@@ -63,6 +63,7 @@ class AquaLogic():
         self._send_queue = queue.Queue()
         self._multi_speed_pump = False
         self._heater_auto_mode = True  # Assume the heater is in auto mode
+        self._web = None
 
         if web_port and web_port != 0:
             # Start the web server
@@ -283,7 +284,8 @@ class AquaLogic():
                     _LOGGER.debug('%3.3f: Display update: %s',
                                   frame_start_time, parts)
 
-                    self._web.text_updated(text)
+                    if self._web:
+                        self._web.text_updated(text)
 
                     try:
                         if parts[0] == 'Pool' and parts[1] == 'Temp':

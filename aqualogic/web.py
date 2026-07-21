@@ -1,4 +1,4 @@
-from aiohttp import web, streamer
+from aiohttp import web
 import aiohttp
 import socketserver
 import socket
