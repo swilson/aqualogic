@@ -12,7 +12,6 @@ import time
 import serial
 import datetime
 
-from .web import WebServer
 from .states import States
 from .keys import Keys
 
@@ -44,7 +43,7 @@ class AquaLogic():
     FRAME_TYPE_PUMP_SPEED_REQUEST = b'\x0c\x01'
     FRAME_TYPE_PUMP_STATUS = b'\x00\x0c'
 
-    def __init__(self, web_port=8129):
+    def __init__(self):
         self._socket = None
         self._serial = None
         self._io = None
@@ -63,12 +62,6 @@ class AquaLogic():
         self._send_queue = queue.Queue()
         self._multi_speed_pump = False
         self._heater_auto_mode = True  # Assume the heater is in auto mode
-        self._web = None
-
-        if web_port and web_port != 0:
-            # Start the web server
-            self._web = WebServer(self)
-            self._web.start(web_port)
 
     def connect(self, host, port):
         self.connect_socket(host, port)
@@ -283,9 +276,6 @@ class AquaLogic():
                     parts = text.split()
                     _LOGGER.debug('%3.3f: Display update: %s',
                                   frame_start_time, parts)
-
-                    if self._web:
-                        self._web.text_updated(text)
 
                     try:
                         if parts[0] == 'Pool' and parts[1] == 'Temp':
