@@ -15,7 +15,6 @@ _LOGGER = logging.getLogger(__name__)
 class WebServer():
     def __init__(self, panel):
         self._panel = panel
-        self._msg_queue = asyncio.Queue()
 
     def _run_thread(self):
         asyncio.set_event_loop(self._loop)
@@ -25,7 +24,8 @@ class WebServer():
             pass
 
     def start(self, port):
-        self._loop = asyncio.get_event_loop()
+        self._loop = asyncio.new_event_loop()
+        self._msg_queue = asyncio.Queue()
 
         # Set up the HTTP server
         app = web.Application()

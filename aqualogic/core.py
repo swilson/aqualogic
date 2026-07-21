@@ -126,7 +126,7 @@ class AquaLogic():
         self._socket.send(data)
     
     def _write_to_serial(self, data):
-        self._serial.send(data)
+        self._serial.write(data)
         self._serial.flush()
         
     def _write_to_io(self, data):
