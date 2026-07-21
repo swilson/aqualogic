@@ -7,6 +7,7 @@ class Keys(IntEnum):
     RIGHT = 0x0001
     MENU = 0x0002
     LEFT = 0x0004
+    LEFTRIGHT = 0x0005
     SERVICE = 0x0008
     MINUS = 0x0010
     PLUS = 0x0020
@@ -21,6 +22,7 @@ class Keys(IntEnum):
     AUX_6 = 0x4000
     AUX_7 = 0x8000
     # These are only valid for WIRELESS_KEY_EVENTs
+    SUPER_CHLORINATE = 0x04000000
     VALVE_3 = 0x00010000
     VALVE_4 = 0x00020000
     HEATER_1 = 0x00040000
