@@ -26,7 +26,7 @@ class AquaLogic():
     FRAME_STX = 0x02
     FRAME_ETX = 0x03
 
-    READ_TIMEOUT = 5
+    READ_TIMEOUT = 10
 
     # Local wired panel (black face with service button)
     FRAME_TYPE_LOCAL_WIRED_KEY_EVENT = b'\x00\x02'
@@ -62,24 +62,38 @@ class AquaLogic():
         self._send_queue = queue.Queue()
         self._multi_speed_pump = False
         self._heater_auto_mode = True  # Assume the heater is in auto mode
+        self._super_chlor_time_remain = '00:00'
+        self._display = None
+        self._configmenu = False
+        self._tx_wait_for_keepalive = True
+        self._tx_retry_enabled = True
 
-    def connect(self, host, port):
-        self.connect_socket(host, port)
+    def connect(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled= True):
+        self.connect_socket(host, port, tx_wait_for_keepalive, tx_retry_enabled)
 
-    def connect_socket(self, host, port):
+    def connect_socket(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled = True):
         """Connects via a RS-485 to Ethernet adapter."""
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except socket.error as error:
+            _LOGGER.info('Socket Error (Connect): %s',error)
         self._socket.connect((host, port))
         self._socket.settimeout(self.READ_TIMEOUT)
         self._read = self._read_byte_from_socket
         self._write = self._write_to_socket
+        self._tx_wait_for_keepalive = tx_wait_for_keepalive
+        self._tx_retry_enabled = tx_retry_enabled
+        _LOGGER.info("Connected to %s:%d", host, port)
 
-    def connect_serial(self, serial_port_name):
+    def connect_serial(self, serial_port_name, tx_wait_for_keepalive = True, tx_retry_enabled = True):
         self._serial = serial.Serial(port=serial_port_name, baudrate=19200,
                           stopbits=serial.STOPBITS_TWO, timeout=self.READ_TIMEOUT)
         self._read = self._read_byte_from_serial
         self._write = self._write_to_serial
-    
+        self._tx_wait_for_keepalive = tx_wait_for_keepalive
+        self._tx_retry_enabled = tx_retry_enabled
+
+    # Test connect point
     def connect_io(self, io):
         self._io = io
         self._read = self._read_byte_from_io
@@ -133,14 +147,15 @@ class AquaLogic():
             _LOGGER.info('%3.3f: Sent: %s', time.monotonic(),
                          binascii.hexlify(data['frame']))
 
-            try:
-                if data['desired_states'] is not None:
-                    # Set a timer to verify the state changes
-                    # Wait 2 seconds as it can take a while for
-                    # the state to change.
-                    Timer(2.0, self._check_state, [data]).start()
-            except KeyError:
-                pass
+            if self._tx_retry_enabled:
+                try:
+                    if data['desired_states'] is not None:
+                        # Set a timer to verify the state changes
+                        # Wait 2 seconds as it can take a while for
+                        # the state to change.
+                        Timer(2.0, self._check_state, [data]).start()
+                except KeyError:
+                    pass
 
     def process(self, data_changed_callback):
         """Process data; returns when the reader signals EOF.
@@ -214,16 +229,20 @@ class AquaLogic():
                 frame_type = frame[0:2]
                 frame = frame[2:]
 
-                if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
-                    # Keep alive
-                    # _LOGGER.debug('%3.3f: KA', frame_start_time)
+                if self._tx_wait_for_keepalive:
+                    if frame_type == self.FRAME_TYPE_KEEP_ALIVE:
+                        # Keep alive
+                        # _LOGGER.debug('%3.3f: KA', frame_start_time)
 
-                    # If a frame has been queued for transmit, send it.
-                    if not self._send_queue.empty():
-                        self._send_frame()
+                        # If a frame has been queued for transmit, send it.
+                        if not self._send_queue.empty():
+                            self._send_frame(True)
 
-                    continue
-                elif frame_type == self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT:
+                        continue
+                else:
+                   self._send_frame(False)
+
+                if frame_type == self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT:
                     _LOGGER.debug('%3.3f: Local Wired Key: %s',
                                   frame_start_time, binascii.hexlify(frame))
                 elif frame_type == self.FRAME_TYPE_REMOTE_WIRED_KEY_EVENT:
@@ -272,10 +291,16 @@ class AquaLogic():
                         data_changed_callback(self)
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                     # Convert LCD-specific degree symbol and decode to utf-8
-                    text = frame.replace(b'\xdf', b'\xc2\xb0').decode('utf-8')
-                    parts = text.split()
+                    text = self._convert_to_string(frame)
+                    
                     _LOGGER.debug('%3.3f: Display update: %s',
-                                  frame_start_time, parts)
+                                  frame_start_time, text)
+
+                    if self._display != text:
+                        self._display = text
+                        data_changed_callback(self)
+
+                    parts = text.split()
 
                     try:
                         if parts[0] == 'Pool' and parts[1] == 'Temp':
@@ -285,6 +310,7 @@ class AquaLogic():
                                 self._pool_temp = value
                                 self._is_metric = parts[2][-1:] == 'C'
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Spa' and parts[1] == 'Temp':
                             # Spa Temp <temp>°[C|F]
                             value = int(parts[2][:-2])
@@ -292,6 +318,7 @@ class AquaLogic():
                                 self._spa_temp = value
                                 self._is_metric = parts[2][-1:] == 'C'
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Air' and parts[1] == 'Temp':
                             # Air Temp <temp>°[C|F]
                             value = int(parts[2][:-2])
@@ -299,18 +326,21 @@ class AquaLogic():
                                 self._air_temp = value
                                 self._is_metric = parts[2][-1:] == 'C'
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Pool' and parts[1] == 'Chlorinator':
                             # Pool Chlorinator <value>%
                             value = int(parts[2][:-1])
                             if self._pool_chlorinator != value:
                                 self._pool_chlorinator = value
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Spa' and parts[1] == 'Chlorinator':
                             # Spa Chlorinator <value>%
                             value = int(parts[2][:-1])
                             if self._spa_chlorinator != value:
                                 self._spa_chlorinator = value
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Salt' and parts[1] == 'Level':
                             # Salt Level <value> [g/L|PPM|
                             value = float(parts[2])
@@ -318,14 +348,49 @@ class AquaLogic():
                                 self._salt_level = value
                                 self._is_metric = parts[3] == 'g/L'
                                 data_changed_callback(self)
+
                         elif parts[0] == 'Check' and parts[1] == 'System':
                             # Check System <msg>
                             value = ' '.join(parts[2:])
                             if self._check_system_msg != value:
                                 self._check_system_msg = value
                                 data_changed_callback(self)
+
+                        elif (parts[0] == 'Chlorinator' and parts[1] == 'Off' and 
+                            parts[2] == 'No' and parts[3] == 'Flow'):
+                            # Possible pressure issue
+                            value = ' '.join(parts[2:])
+                            if self._check_system_msg != value:
+                                self._check_system_msg = value
+                                data_changed_callback(self)
+
+                        elif (len(parts) > 3 and parts[0] == 'Super' and parts[1] == 'Chlorinate' and
+                            parts[3] == 'remaining'):
+                            # Super chlorination <value> remaining
+                            value = parts[2].replace(" ","")
+                            value = value.replace("Âº",":")
+                            if self._super_chlor_time_remain != value:
+                                self._super_chlor_time_remain = value
+                                data_changed_callback(self)
+
+                        elif parts[0] == 'Configuration' and parts[1] == 'Menu-Locked':
+                            self._configmenu = True
+
                         elif parts[0] == 'Heater1':
-                            self._heater_auto_mode = parts[1] == 'Auto'
+                            # P4 heater mode
+                            value = parts[1] == 'Auto'
+                            if value != self._heater_auto_mode:
+                                self._heater_auto_mode = value
+                                data_changed_callback(self)
+
+                        elif parts[0] == 'Gas' and parts[1] == 'Heater':
+                            # P8 heater mode
+                            # Gas Heater [Auto|Manual]
+                            value = parts[2] == 'Auto'
+                            if self._heater_auto_mode != value:
+                                self._heater_auto_mode = value
+                                data_changed_callback(self)
+
                     except ValueError:
                         pass
                 elif frame_type == self.FRAME_TYPE_LONG_DISPLAY_UPDATE:
@@ -342,6 +407,33 @@ class AquaLogic():
             _LOGGER.info("serial timeout")
         except EOFError:
             _LOGGER.info("eof")
+
+    def _convert_to_string(self, frame):
+        length = len(frame) - 1 # Exclude null terminator
+        lineLength = length // 2
+        topLine = self._convert_lcd_chars(frame[0:lineLength])
+        bottomLine = self._convert_lcd_chars(frame[lineLength:length])
+
+        if len(bottomLine) == 0:
+            return topLine
+
+        return topLine + "\n" + bottomLine
+
+    def _convert_lcd_chars(self, data):
+        text = ""
+
+        # Remove any other non-ASCII characters
+        for i in range(0, len(data) - 1):
+            if data[i] < 0x20:
+                continue
+            elif data[i] >= 0x20 and data[i] <= 0x7f:
+                text += chr(data[i])
+            elif data[i] > 0x7f:
+                # Convert known Hitachi-like LCD characters to UTF-8
+                if data[i] == 0xdf: # Degree symbol
+                    text += "\u00b0"
+
+        return text.strip()
 
     def _append_data(self, frame, data):
         for byte in data:
@@ -431,6 +523,11 @@ class AquaLogic():
         return 'OK'
 
     @property
+    def display(self):
+        """Returns Display messages."""
+        return self._display
+
+    @property
     def pump_speed(self):
         """Returns the current pump speed in percent, or None if unknown.
            Requires a Hayward VSP pump connected to the AquaLogic bus."""
@@ -452,6 +549,13 @@ class AquaLogic():
     def is_heater_enabled(self):
         """Returns True if HEATER_1 is on"""
         return self.get_state(States.HEATER_1)
+
+    @property
+    def super_chlorinate_time_remaining(self):
+        """Returns time remaining if super chlorinate is on"""
+        if self.get_state(States.SUPER_CHLORINATE):
+            return self._super_chlor_time_remain
+        return '00:00'
 
     @property
     def is_super_chlorinate_enabled(self):
