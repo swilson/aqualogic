@@ -43,3 +43,22 @@ class TestAquaLogic(object):
         assert not aq.get_state(States.POOL)
         assert aq.get_state(States.FILTER)
         assert aq.get_state(States.SPA)
+   
+
+    def test_idle(self):
+        aq = AquaLogic()
+        aq.connect_io(FileIO('tests/data/idle.bin'))
+        aq.process(self.data_changed)
+        # Yes it was cold out when I grabbed this data
+        assert aq.is_metric
+        assert aq.air_temp == 1
+        assert aq.pool_temp == 0
+        assert aq.spa_temp == None
+        assert aq.pool_chlorinator == 0
+        assert aq.spa_chlorinator == None
+        assert aq.salt_level == None
+        assert aq.get_state(States.POOL)
+        assert aq.get_state(States.FILTER)
+        assert not aq.get_state(States.SPA)
+
+

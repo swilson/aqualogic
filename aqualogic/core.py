@@ -301,7 +301,7 @@ class AquaLogic():
                         data_changed_callback(self)
 
                     parts = text.split()
-
+                    
                     try:
                         if parts[0] == 'Pool' and parts[1] == 'Temp':
                             # Pool Temp <temp>°[C|F]
@@ -411,8 +411,8 @@ class AquaLogic():
     def _convert_to_string(self, frame):
         length = len(frame) - 1 # Exclude null terminator
         lineLength = length // 2
-        topLine = self._convert_lcd_chars(frame[0:lineLength])
-        bottomLine = self._convert_lcd_chars(frame[lineLength:length])
+        topLine = self._convert_lcd_chars(frame[:lineLength+1])
+        bottomLine = self._convert_lcd_chars(frame[lineLength:])
 
         if len(bottomLine) == 0:
             return topLine
