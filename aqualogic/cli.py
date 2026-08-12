@@ -7,7 +7,7 @@ import sys
 from .core import AquaLogic
 from .states import States
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 def _data_changed(panel):

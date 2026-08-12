@@ -290,7 +290,6 @@ class AquaLogic():
                         self._pump_power = power
                         data_changed_callback(self)
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
-                    # Convert LCD-specific degree symbol and decode to utf-8
                     text = self._convert_to_string(frame)
                     
                     _LOGGER.debug('%3.3f: Display update: %s',
@@ -392,6 +391,10 @@ class AquaLogic():
                                 data_changed_callback(self)
 
                     except ValueError:
+                        _LOGGER.debug('Bad value in display update: %s', parts)
+                        pass
+                    except IndexError:
+                        _LOGGER.debug('Bad index in display update: %s', parts)
                         pass
                 elif frame_type == self.FRAME_TYPE_LONG_DISPLAY_UPDATE:
                     # Not currently parsed
@@ -429,7 +432,7 @@ class AquaLogic():
             elif data[i] >= 0x20 and data[i] <= 0x7f:
                 text += chr(data[i])
             elif data[i] > 0x7f:
-                # Convert known Hitachi-like LCD characters to UTF-8
+                # Convert known Hitachi-like LCD characters
                 if data[i] == 0xdf: # Degree symbol
                     text += "\u00b0"
 
@@ -628,6 +631,7 @@ class AquaLogic():
             except KeyError:
                 # TODO: send the appropriate combination of keys
                 # to enable the state
+                _LOGGER.info('Not able to set state for %s', state.name)
                 return False
             desired_states = [{'state': state, 'enabled': not is_enabled}]
 
