@@ -236,11 +236,11 @@ class AquaLogic():
 
                         # If a frame has been queued for transmit, send it.
                         if not self._send_queue.empty():
-                            self._send_frame(True)
+                            self._send_frame()
 
                         continue
                 else:
-                   self._send_frame(False)
+                   self._send_frame()
 
                 if frame_type == self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT:
                     _LOGGER.debug('%3.3f: Local Wired Key: %s',
