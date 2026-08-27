@@ -4,7 +4,6 @@ pool controller."""
 
 from enum import IntEnum, unique
 from threading import Timer
-import binascii
 import logging
 import queue
 import socket
@@ -145,7 +144,7 @@ class AquaLogic():
             data = self._send_queue.get(block=False)
             self._write(data['frame'])
             _LOGGER.info('%3.3f: Sent: %s', time.monotonic(),
-                         binascii.hexlify(data['frame']))
+                         data['frame'].hex(" "))
 
             if self._tx_retry_enabled:
                 try:
@@ -244,16 +243,16 @@ class AquaLogic():
 
                 if frame_type == self.FRAME_TYPE_LOCAL_WIRED_KEY_EVENT:
                     _LOGGER.debug('%3.3f: Local Wired Key: %s',
-                                  frame_start_time, binascii.hexlify(frame))
+                                  frame_start_time, frame.hex(" "))
                 elif frame_type == self.FRAME_TYPE_REMOTE_WIRED_KEY_EVENT:
                     _LOGGER.debug('%3.3f: Remote Wired Key: %s',
-                                  frame_start_time, binascii.hexlify(frame))
+                                  frame_start_time, frame.hex(" "))
                 elif frame_type == self.FRAME_TYPE_WIRELESS_KEY_EVENT:
                     _LOGGER.debug('%3.3f: Wireless Key: %s',
-                                  frame_start_time, binascii.hexlify(frame))
+                                  frame_start_time, frame.hex(" "))
                 elif frame_type == self.FRAME_TYPE_LEDS:
                     # _LOGGER.debug('%3.3f: LEDs: %s',
-                    #              frame_start_time, binascii.hexlify(frame))
+                    #              frame_start_time, frame.hex(" "))
                     # First 4 bytes are the LEDs that are on;
                     # second 4 bytes_ are the LEDs that are flashing
                     states = int.from_bytes(frame[0:4], byteorder='little')
@@ -292,7 +291,7 @@ class AquaLogic():
                 elif frame_type == self.FRAME_TYPE_DISPLAY_UPDATE:
                     text = self._convert_to_string(frame)
                     
-                    _LOGGER.debug('%3.3f: Display update: %s',
+                    _LOGGER.debug('%3.3f: Display update:\n%s',
                                   frame_start_time, text)
 
                     if self._display != text:
@@ -402,8 +401,8 @@ class AquaLogic():
                 else:
                     _LOGGER.debug('%3.3f: Unknown frame: %s %s',
                                  frame_start_time,
-                                 binascii.hexlify(frame_type),
-                                 binascii.hexlify(frame))
+                                 frame_type.hex(" "),
+                                 frame)
         except socket.timeout:
             _LOGGER.info("socket timeout")
         except serial.SerialTimeoutException:
@@ -416,9 +415,6 @@ class AquaLogic():
         lineLength = length // 2
         topLine = self._convert_lcd_chars(frame[:lineLength+1])
         bottomLine = self._convert_lcd_chars(frame[lineLength:])
-
-        if len(bottomLine) == 0:
-            return topLine
 
         return topLine + "\n" + bottomLine
 
@@ -436,7 +432,7 @@ class AquaLogic():
                 if data[i] == 0xdf: # Degree symbol
                     text += "\u00b0"
 
-        return text.strip()
+        return text
 
     def _append_data(self, frame, data):
         for byte in data:
