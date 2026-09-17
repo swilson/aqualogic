@@ -67,11 +67,16 @@ class AquaLogic():
         self._configmenu = False
         self._tx_wait_for_keepalive = True
         self._tx_retry_enabled = True
+        self._tx_burst_count = 1
+        self._tx_burst_delay = 0.001
 
-    def connect(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled= True):
-        self.connect_socket(host, port, tx_wait_for_keepalive, tx_retry_enabled)
+    def connect(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled= True,
+                tx_burst_count = 1, tx_burst_delay = 0.001):
+        self.connect_socket(host, port, tx_wait_for_keepalive, tx_retry_enabled,
+                            tx_burst_count, tx_burst_delay)
 
-    def connect_socket(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled = True):
+    def connect_socket(self, host, port, tx_wait_for_keepalive = True, tx_retry_enabled = True,
+                       tx_burst_count = 1, tx_burst_delay = 0.001):
         """Connects via a RS-485 to Ethernet adapter."""
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,6 +88,8 @@ class AquaLogic():
         self._write = self._write_to_socket
         self._tx_wait_for_keepalive = tx_wait_for_keepalive
         self._tx_retry_enabled = tx_retry_enabled
+        self._tx_burst_count = max(1, int(tx_burst_count))
+        self._tx_burst_delay = max(0.0, float(tx_burst_delay))
         _LOGGER.info("Connected to %s:%d", host, port)
 
     def connect_serial(self, serial_port_name, tx_wait_for_keepalive = True, tx_retry_enabled = True):
@@ -143,8 +150,17 @@ class AquaLogic():
     def _send_frame(self):
         if not self._send_queue.empty():
             data = self._send_queue.get(block=False)
-            self._write(data['frame'])
-            _LOGGER.info('%3.3f: Sent: %s', time.monotonic(),
+            # Some Wi-Fi RS-485 bridges cannot turn a single write around
+            # inside the ~1ms window the controller listens in after its
+            # keep-alive, so the keypress is never seen. Repeating the frame
+            # puts one copy inside the window. Defaults to 1, which is the
+            # previous behaviour; only raise it if single writes are lost.
+            for i in range(self._tx_burst_count):
+                self._write(data['frame'])
+                if i < self._tx_burst_count - 1:
+                    time.sleep(self._tx_burst_delay)
+            _LOGGER.info('%3.3f: Sent (%dx): %s', time.monotonic(),
+                         self._tx_burst_count,
                          binascii.hexlify(data['frame']))
 
             if self._tx_retry_enabled:
