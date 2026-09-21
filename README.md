@@ -10,4 +10,6 @@ Since the Goldline protocol uses RS-485, a hardware interface is required. I'm u
 
 Tested on an AquaLogic P4 (GLX-PCB-MAIN) with Main Software Revision 2.91. YMMV.
 
+Releases available at https://pypi.org/project/aqualogic/.
+
 This project is not affiliated with or endorsed by Hayward Industries Inc. in any way. 
