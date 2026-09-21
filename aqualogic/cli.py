@@ -33,7 +33,7 @@ PANEL = AquaLogic()
 if len(sys.argv) == 2:
     PANEL.connect_serial(sys.argv[1])
 else:
-    PANEL.connect(sys.argv[1], int(sys.argv[2]))
+    PANEL.connect(sys.argv[1], int(sys.argv[2]), tx_burst_count=10)
 print('Connected!')
 print('To toggle a state, type in the State name, e.g. LIGHTS')
 
